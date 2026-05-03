@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * Dark-only design system.
+ * Colors are tuned for OLED-ish iPhone screens — true blacks, soft whites,
+ * with a single accent (electric blue) used sparingly for CTAs.
+ *
+ * The @theme block defines design tokens that Tailwind v4 turns into utility
+ * classes: bg-bg-base, text-fg-primary, ring-accent, etc.
+ */
+@theme {
+  /* Surfaces — deepest at the back, lighter as you stack forward */
+  --color-bg-base: #000000;
+  --color-bg-surface: #0a0a0c;
+  --color-bg-elevated: #161618;
+  --color-bg-overlay: #1f1f23;
+
+  /* Borders / dividers */
+  --color-border-subtle: #25252a;
+  --color-border-strong: #34343a;
+
+  /* Foreground — text and icons */
+  --color-fg-primary: #f5f5f7;
+  --color-fg-secondary: #a1a1a6;
+  --color-fg-muted: #6e6e73;
+
+  /* Accent — used for primary CTAs and active state */
+  --color-accent: #0a84ff;
+  --color-accent-hover: #409cff;
+  --color-accent-fg: #ffffff;
+
+  /* Semantic colors */
+  --color-success: #30d158;
+  --color-warning: #ff9f0a;
+  --color-danger: #ff453a;
+  --color-info: #64d2ff;
+
+  /* Type scale tuned for iPhone reading */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radii — iOS-feeling soft corners */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+/*
+ * Base resets and global styles.
+ * color-scheme: dark forces native form controls (date pickers, etc.)
+ * to render in dark on iOS Safari.
+ */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-bg-base);
+  color: var(--color-fg-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Disable iOS Safari's tap highlight — we use our own active states */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS auto-zoom on focus by ensuring all form fonts are >= 16px */
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+/* Use safe-area insets for full-bleed layouts on notched iPhones */
+body {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}

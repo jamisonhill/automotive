@@ -1,0 +1,342 @@
+// =============================================================================
+// Automotive — Prisma schema
+// =============================================================================
+// SQLite is plenty for a single-user app with 4 cars. The DB file lives on a
+// NAS volume so backups happen via Synology snapshots, not in-app.
+//
+// Conventions:
+// - All IDs are cuid() — short, sortable, URL-safe.
+// - Money is stored as Float (SQLite has no DECIMAL). For a personal app
+//   tracking dollars, this is fine; we never do exact accounting.
+// - Mileage is always Int (whole miles).
+// - Tread depth is Int in 32nds of an inch (the standard US unit).
+// - Pressure is Float PSI.
+// - "category" / "serviceType" are strings rather than enums so we can add
+//   new types without a migration. Validation lives at the API boundary.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------------------------------------------
+// Vehicle — the root entity. Everything else hangs off this.
+// -----------------------------------------------------------------------------
+model Vehicle {
+  id              String   @id @default(cuid())
+  nickname        String?  // friendly name like "Daily" or "Truck"
+  year            Int
+  make            String
+  model           String
+  trim            String?
+  vin             String?
+  engine          String?  // e.g. "3.5L V6"
+  transmission    String?  // e.g. "6-speed automatic"
+  drivetrain      String?  // FWD, RWD, AWD, 4WD
+  color           String?
+  licensePlate    String?
+  purchaseDate    DateTime?
+  purchaseMileage Int?
+  purchasePrice   Float?
+  photoPath       String?  // path under /data/photos
+  notes           String?
+  isActive        Boolean  @default(true) // soft-delete: set false instead of removing history
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  baseline         Baseline?
+  odometerReadings OdometerReading[]
+  fuelEntries      FuelEntry[]
+  serviceEntries   ServiceEntry[]
+  tirePressureLogs TirePressureLog[]
+  tireSets         TireSet[]
+  reminders        Reminder[]
+  issues           Issue[]
+}
+
+// -----------------------------------------------------------------------------
+// Baseline — used-car snapshot at the time the vehicle is added to the system.
+// One per vehicle. Captures pre-existing wear/condition so future maintenance
+// decisions can be made with the right context.
+// -----------------------------------------------------------------------------
+model Baseline {
+  id                String   @id @default(cuid())
+  vehicleId         String   @unique
+  vehicle           Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  recordedAt        DateTime @default(now())
+  mileageAtBaseline Int
+
+  // Tires — tread depth in 32nds (e.g. new tires are usually 10–11/32)
+  treadFL           Int?
+  treadFR           Int?
+  treadRL           Int?
+  treadRR           Int?
+  tireBrand         String?
+  tireModel         String?
+  tireDotDate       String?  // DOT week/year stamp like "3220" = week 32 of 2020
+
+  // Brakes — pad thickness in mm (new pads are ~10–12mm; replace at ~3mm)
+  brakePadFront     Float?
+  brakePadRear      Float?
+  rotorConditionFront String? // good, lipped, scored, warped, replace
+  rotorConditionRear  String?
+
+  // Battery
+  batteryAgeMonths  Int?
+  batteryCca        Int?     // cold-cranking amps measured by load tester
+  batteryBrand      String?
+
+  // Fluid conditions: new, good, fair, poor, unknown
+  oilCondition           String?
+  coolantCondition       String?
+  brakeFluidCondition    String?
+  transFluidCondition    String?
+  diffFluidCondition     String?
+  powerSteeringCondition String?
+
+  // Belts/hoses overall condition
+  beltsCondition    String?
+  hosesCondition    String?
+
+  // Free-text capture
+  knownIssues       String?  // "AC blows warm, slight oil weep at valve cover"
+  recentService     String?  // what previous owner reportedly did recently
+  notes             String?
+}
+
+// -----------------------------------------------------------------------------
+// OdometerReading — canonical mileage timeline.
+// Every fuel entry, service entry, and manual update writes a row here so
+// "what was the mileage on date X" is a single query, sorted index lookup.
+// -----------------------------------------------------------------------------
+model OdometerReading {
+  id         String   @id @default(cuid())
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  miles      Int
+  recordedAt DateTime
+  source     String   // 'manual', 'fuel', 'service', 'baseline'
+  sourceId   String?  // FK string to source row (loose link, not enforced)
+  createdAt  DateTime @default(now())
+
+  @@index([vehicleId, recordedAt])
+}
+
+// -----------------------------------------------------------------------------
+// FuelEntry — every fill-up.
+// tripMiles and tripMpg are computed at write time and stored, so charts
+// don't have to recompute on every render.
+// -----------------------------------------------------------------------------
+model FuelEntry {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  filledAt       DateTime
+  odometer       Int
+  gallons        Float
+  pricePerGallon Float?
+  totalCost      Float?
+  octane         Int?
+  station        String?
+  partialFill    Boolean  @default(false) // didn't fill to full — exclude from MPG calc
+  missedFill     Boolean  @default(false) // user skipped a previous fill — MPG since last is bogus
+  notes          String?
+
+  // Computed and stored at write time:
+  tripMiles Int?   // miles since last full fill
+  tripMpg   Float? // tripMiles / gallons (only valid for full fills with no missed fill)
+
+  createdAt DateTime @default(now())
+
+  @@index([vehicleId, filledAt])
+}
+
+// -----------------------------------------------------------------------------
+// ServiceEntry — unified table for everything done to the car.
+// `category` distinguishes routine maintenance from major repairs from
+// inspections from modifications. Repairs use the warranty/part fields;
+// routine usually leaves those null.
+//
+// `serviceType` is the specific item: 'oil_change', 'tire_rotation',
+// 'alternator', 'brakes_front_pads', 'water_pump', 'custom', etc. Free string
+// so we can add new types without a migration.
+// -----------------------------------------------------------------------------
+model ServiceEntry {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  category    String   // 'routine' | 'repair' | 'inspection' | 'modification' | 'diagnostic'
+  serviceType String   // 'oil_change', 'alternator', etc.
+  customLabel String?  // when serviceType='custom'
+  performedAt DateTime
+  odometer    Int
+
+  // Part info (mostly used for repairs)
+  partBrand     String?
+  partNumber    String?
+  partCondition String? // 'new', 'reman', 'used'
+  supplier      String?
+
+  // Warranty (months OR miles, whichever expires first)
+  warrantyMonths Int?
+  warrantyMiles  Int?
+
+  // Cost split — partsCost + laborCost should equal totalCost when both set
+  partsCost Float?
+  laborCost Float?
+  totalCost Float?
+
+  // Where it was done
+  diy      Boolean @default(false)
+  shopName String?
+
+  // Repair-specific narrative
+  symptoms  String?
+  diagnosis String?
+
+  notes       String?
+  receiptPath String? // path under /data/receipts
+
+  // Oil-change specific fields (denormalized for quick lookup)
+  oilType       String? // 'conventional', 'synthetic', 'high-mileage', 'blend'
+  oilViscosity  String? // '5W-30', '0W-20', etc.
+  oilFilterPart String?
+
+  // Optional link from a repair back to the issue/diagnostic that prompted it
+  resolvedIssueId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([vehicleId, performedAt])
+  @@index([vehicleId, serviceType])
+  @@index([vehicleId, category])
+}
+
+// -----------------------------------------------------------------------------
+// TireSet — a set of tires installed at a point in time.
+// Pressure logs and tread depth logs link back to whichever set was on the
+// car at the time of measurement.
+// -----------------------------------------------------------------------------
+model TireSet {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  brand          String
+  model          String
+  size           String   // e.g. "225/65R17"
+  loadIndex      String?
+  speedRating    String?
+  treadwear      Int?     // UTQG treadwear rating
+  installedAt    DateTime
+  installMileage Int
+  removedAt      DateTime?
+  removeMileage  Int?
+  removeReason   String?  // 'worn', 'damage', 'upgrade', 'seasonal'
+  cost           Float?
+  notes          String?
+
+  pressureLogs   TirePressureLog[]
+  treadDepthLogs TreadDepthLog[]
+
+  @@index([vehicleId, installedAt])
+}
+
+// -----------------------------------------------------------------------------
+// TirePressureLog — a single pressure check and/or fill event.
+// Records "before" PSI for each corner; "after" PSI is null if the user just
+// checked without filling. ambientF helps explain seasonal pressure swings.
+// -----------------------------------------------------------------------------
+model TirePressureLog {
+  id         String   @id @default(cuid())
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  tireSetId  String?
+  tireSet    TireSet? @relation(fields: [tireSetId], references: [id])
+  recordedAt DateTime
+  ambientF   Float?   // outside temp at time of measurement
+
+  // Before-fill PSI per corner
+  flBefore Float?
+  frBefore Float?
+  rlBefore Float?
+  rrBefore Float?
+
+  // After-fill PSI per corner (null if it was a check-only event)
+  flAfter Float?
+  frAfter Float?
+  rlAfter Float?
+  rrAfter Float?
+
+  notes String?
+
+  @@index([vehicleId, recordedAt])
+}
+
+// -----------------------------------------------------------------------------
+// TreadDepthLog — periodic tread depth measurements per corner, in 32nds.
+// Used to project replacement mileage.
+// -----------------------------------------------------------------------------
+model TreadDepthLog {
+  id         String   @id @default(cuid())
+  tireSetId  String
+  tireSet    TireSet  @relation(fields: [tireSetId], references: [id], onDelete: Cascade)
+  recordedAt DateTime
+  mileage    Int
+  fl         Int      // 32nds of an inch
+  fr         Int
+  rl         Int
+  rr         Int
+  notes      String?
+
+  @@index([tireSetId, recordedAt])
+}
+
+// -----------------------------------------------------------------------------
+// Reminder — interval-based service due tracker.
+// `intervalMiles` and `intervalMonths` are independent — whichever expires
+// first triggers the reminder. lastDoneMiles/lastDoneAt are advanced when
+// a matching ServiceEntry is logged.
+// -----------------------------------------------------------------------------
+model Reminder {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  label          String   // "Oil change", "Tire rotation"
+  serviceType    String?  // matches ServiceEntry.serviceType for auto-update
+  intervalMiles  Int?
+  intervalMonths Int?
+  lastDoneMiles  Int?
+  lastDoneAt     DateTime?
+  isActive       Boolean  @default(true)
+  notes          String?
+
+  @@index([vehicleId, isActive])
+}
+
+// -----------------------------------------------------------------------------
+// Issue — symptoms / problems / DTCs the user wants to track.
+// May or may not result in a repair. Status flow: open → monitoring → resolved.
+// resolvedServiceEntryId links to the repair that fixed it (if any).
+// -----------------------------------------------------------------------------
+model Issue {
+  id                     String    @id @default(cuid())
+  vehicleId              String
+  vehicle                Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  reportedAt             DateTime  @default(now())
+  reportedMileage        Int?
+  status                 String    // 'open' | 'monitoring' | 'resolved'
+  symptom                String
+  diagnosis              String?
+  dtcCodes               String?   // comma-separated OBD-II codes like "P0301,P0302"
+  resolvedAt             DateTime?
+  resolvedServiceEntryId String?
+  notes                  String?
+
+  @@index([vehicleId, status])
+}

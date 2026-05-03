@@ -1,0 +1,38 @@
+# Don't ship anything we don't need into the build context.
+# Keeping this list tight makes builds faster and the image smaller.
+
+# Build output / caches
+.next/
+node_modules/
+out/
+build/
+dist/
+
+# Local data (production data lives on NAS volume, not in image)
+data/
+*.db
+*.db-journal
+*.sqlite
+
+# Dev / editor
+.git/
+.gitignore
+.env
+.env.local
+.env.development
+.env.production
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.log
+
+# Docs and CI — not needed at runtime
+README.md
+docs/
+.github/
+
+# Misc
+*.tsbuildinfo
+coverage/
+.eslintcache
