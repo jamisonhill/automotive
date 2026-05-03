@@ -26,8 +26,9 @@ export async function listActiveVehicles() {
 }
 
 /**
- * Single vehicle by id, with the most recent odometer reading and baseline.
- * Returns null if the vehicle doesn't exist or has been archived.
+ * Single vehicle by id, with the most recent odometer reading, baseline,
+ * and most recent fuel entry. Returns null if the vehicle doesn't exist or
+ * has been archived.
  */
 export async function getVehicle(id: string) {
   return prisma.vehicle.findFirst({
@@ -36,6 +37,10 @@ export async function getVehicle(id: string) {
       baseline: true,
       odometerReadings: {
         orderBy: { recordedAt: "desc" },
+        take: 1,
+      },
+      fuelEntries: {
+        orderBy: { filledAt: "desc" },
         take: 1,
       },
     },

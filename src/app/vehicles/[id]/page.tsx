@@ -40,6 +40,7 @@ export default async function VehicleDetailPage({
 
   const latestMiles = vehicle.odometerReadings[0]?.miles;
   const hasBaseline = vehicle.baseline != null;
+  const lastFuel = vehicle.fuelEntries[0] ?? null;
 
   return (
     <main className="mx-auto max-w-md px-4 py-4">
@@ -101,10 +102,16 @@ export default async function VehicleDetailPage({
           }
         />
         <SectionTile
-          icon={<Fuel className="h-5 w-5 text-fg-muted" />}
+          href={`/vehicles/${vehicle.id}/fuel`}
+          icon={<Fuel className="h-5 w-5 text-accent" />}
           title="Fuel & MPG"
-          description="Coming in Phase 3"
-          disabled
+          description={
+            lastFuel
+              ? lastFuel.tripMpg != null
+                ? `Last fill: ${lastFuel.tripMpg.toFixed(1)} mpg`
+                : "Tap to add another fill-up"
+              : "Log your first fill-up"
+          }
         />
         <SectionTile
           icon={<Wrench className="h-5 w-5 text-fg-muted" />}

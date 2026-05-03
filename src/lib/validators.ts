@@ -135,6 +135,54 @@ export const baselineSchema = z.object({
 
 export type BaselineInput = z.infer<typeof baselineSchema>;
 
+// =============================================================================
+// Fuel
+// =============================================================================
+export const fuelSchema = z.object({
+  // Required.
+  filledAt: z.coerce.date(),
+  odometer: z.coerce.number().int().min(0),
+  gallons: z.coerce.number().positive(),
+
+  // Optional cost fields. The form auto-derives the third from the other two
+  // (if you fill in any two), but we accept whatever the user gave us.
+  totalCost: z.preprocess(blankToUndef, z.coerce.number().min(0).optional()),
+  pricePerGallon: z.preprocess(
+    blankToUndef,
+    z.coerce.number().min(0).optional()
+  ),
+
+  octane: z.preprocess(
+    blankToUndef,
+    z.coerce.number().int().min(50).max(120).optional()
+  ),
+  station: optStr,
+
+  // Checkboxes — Boolean coerce treats "on", "true", "1" as true.
+  partialFill: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean()
+  ),
+  missedFill: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean()
+  ),
+
+  notes: optStr,
+});
+
+export type FuelInput = z.infer<typeof fuelSchema>;
+
+// =============================================================================
+// Odometer (manual reading between fills/services)
+// =============================================================================
+export const odometerSchema = z.object({
+  miles: z.coerce.number().int().min(0),
+  recordedAt: z.coerce.date(),
+});
+
+export type OdometerInput = z.infer<typeof odometerSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };
