@@ -41,6 +41,7 @@ export default async function VehicleDetailPage({
   const latestMiles = vehicle.odometerReadings[0]?.miles;
   const hasBaseline = vehicle.baseline != null;
   const lastFuel = vehicle.fuelEntries[0] ?? null;
+  const lastService = vehicle.serviceEntries[0] ?? null;
 
   return (
     <main className="mx-auto max-w-md px-4 py-4">
@@ -114,10 +115,18 @@ export default async function VehicleDetailPage({
           }
         />
         <SectionTile
-          icon={<Wrench className="h-5 w-5 text-fg-muted" />}
+          href={`/vehicles/${vehicle.id}/service`}
+          icon={<Wrench className="h-5 w-5 text-accent" />}
           title="Service & repairs"
-          description="Coming in Phase 4"
-          disabled
+          description={
+            lastService
+              ? `Last: ${lastService.performedAt.toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  year: "2-digit",
+                })}`
+              : "Log oil changes, repairs, inspections"
+          }
         />
         <SectionTile
           icon={<Disc className="h-5 w-5 text-fg-muted" />}

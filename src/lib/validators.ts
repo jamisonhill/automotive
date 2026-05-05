@@ -183,6 +183,82 @@ export const odometerSchema = z.object({
 
 export type OdometerInput = z.infer<typeof odometerSchema>;
 
+// =============================================================================
+// Service entry (routine maintenance, repairs, inspections, modifications)
+// =============================================================================
+export const serviceSchema = z
+  .object({
+    // Required identification
+    category: z.enum([
+      "routine",
+      "repair",
+      "inspection",
+      "modification",
+      "diagnostic",
+    ]),
+    serviceType: z.string().min(1, "Service type is required"),
+    // Required when serviceType === "custom" — validated in superRefine below.
+    customLabel: optStr,
+
+    performedAt: z.coerce.date(),
+    odometer: z.coerce.number().int().min(0),
+
+    // Part info
+    partBrand: optStr,
+    partNumber: optStr,
+    partCondition: z.preprocess(
+      blankToUndef,
+      z.enum(["new", "reman", "used"]).optional()
+    ),
+    supplier: optStr,
+
+    // Warranty (months OR miles, whichever expires first)
+    warrantyMonths: optNonNegInt,
+    warrantyMiles: optNonNegInt,
+
+    // Costs
+    partsCost: optNonNegFloat,
+    laborCost: optNonNegFloat,
+    totalCost: optNonNegFloat,
+
+    // Where the work was done
+    diy: z.preprocess(
+      (v) => v === "on" || v === "true" || v === true,
+      z.boolean()
+    ),
+    shopName: optStr,
+
+    // Repair narrative
+    symptoms: optStr,
+    diagnosis: optStr,
+
+    // Oil-change specific
+    oilType: z.preprocess(
+      blankToUndef,
+      z.enum(["conventional", "synthetic", "high-mileage", "blend"]).optional()
+    ),
+    oilViscosity: optStr,
+    oilFilterPart: optStr,
+
+    // Optional link from a repair back to the issue/diagnostic that prompted it
+    resolvedIssueId: optStr,
+
+    notes: optStr,
+  })
+  .superRefine((val, ctx) => {
+    // Custom service-type requires a label so we don't end up with a row
+    // that says "Custom" and nothing else.
+    if (val.serviceType === "custom" && !val.customLabel) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Custom label is required when service type is 'custom'.",
+        path: ["customLabel"],
+      });
+    }
+  });
+
+export type ServiceInput = z.infer<typeof serviceSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };
