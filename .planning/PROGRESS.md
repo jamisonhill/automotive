@@ -29,7 +29,7 @@ Commit: `1151252` — Phase 1: foundation — scaffold, schema, auth, deploy pip
 
 Commit: `a1d9536` — Phase 2: vehicles + used-car baseline
 
-## Phase 3: Odometer + Fuel [IN PROGRESS]
+## Phase 3: Odometer + Fuel [DONE]
 - [x] Anthropic SDK + Claude Haiku 4.5 vision OCR helper (`src/lib/ocr.ts`)
 - [x] MPG + cost-per-mile calculation logic with partial/missed-fill handling
       (`src/lib/fuel.ts`)
@@ -42,12 +42,22 @@ Commit: `a1d9536` — Phase 2: vehicles + used-car baseline
 - [x] Add fill-up page (`/vehicles/[id]/fuel/new`)
 - [x] Edit/delete fill-up page (`/vehicles/[id]/fuel/[entryId]/edit`)
 - [x] Vehicle dashboard tile updated to link to fuel + show last MPG
+- [x] OCR verified end-to-end on iPhone Safari with real pump photos.
+      Tested at a Sheetz pump: gallons + total + station all extracted.
+- [x] Auto-set "When" timestamp on photo accept; default octane = 87;
+      derive $/gallon from total÷gallons when out of frame.
 - [x] Build + typecheck clean
-- [ ] **PAUSED HERE** — verify OCR with real ANTHROPIC_API_KEY + real pump photo
-- [ ] Commit Phase 3
 
-Manual fuel entry tested by user ("partial fill is good"). OCR untested
-because the Anthropic API key is not yet set in `.env.local`.
+### iPhone gotchas resolved during Phase 3
+- Next.js 16 blocks LAN-origin dev resources by default; required
+  `allowedDevOrigins: ["192.168.0.16"]` in `next.config.ts` so the iPhone
+  could fetch the client JS bundle and hydrate.
+- iOS Safari does not fire `change` on `<input type="file" capture="…">`
+  when the input is inside a `<form>`. Worked around by lifting the
+  input outside the form and linking via `<label htmlFor>`.
+- `new Date()` at component-render time produces SSR/client mismatch
+  that aborts hydration. Datetime field is now seeded server-stable and
+  set to "now" only after the user accepts a photo (or manually).
 
 ## Phase 4: Maintenance + Repairs [PENDING]
 - [ ] Unified ServiceEntry log (routine + repair + inspection + modification)

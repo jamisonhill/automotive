@@ -21,17 +21,33 @@ export interface PumpOcrResult {
   totalCost: number | null;
   pricePerGallon: number | null;
   octane: number | null;
+  // Station name when visible on the pump or receipt — e.g., "Shell",
+  // "Costco", "QuikTrip". Null if not in the frame.
+  station: string | null;
   uncertain: string | null;
 }
 
 const SYSTEM_PROMPT = `You are an OCR specialist for fuel pump LCD/digital displays.
 Extract numeric values exactly as shown on the pump screen.
 
-Common pump display layout:
+The two values that matter are:
 - Total cost (largest, often top-left): the dollars charged for this fill
 - Gallons (often middle): the volume dispensed
-- Price per gallon (often bottom): the rate
-- Sometimes octane (87, 89, 91, 93) is shown next to the grade selected
+
+Bonus values that may not be visible — read them if present, return null if not:
+- Price per gallon: the rate (we can compute it from total/gallons if missing)
+- Octane (87, 89, 91, 93): the grade selected (we default to 87 if missing)
+- Station: the station/brand name shown anywhere in the photo — on the
+  pump housing, awning, signage, screen header, receipt header, or
+  branded fixtures. Read whatever brand text is actually present and
+  return it verbatim (case-corrected to title case is fine), regardless
+  of whether you recognize the chain. Major US examples include Shell,
+  Chevron, BP, Exxon, Mobil, Sunoco, Marathon, Costco, Sam's Club,
+  QuikTrip, Sheetz, Wawa, Casey's, RaceTrac, Maverik, Speedway, Circle K,
+  7-Eleven, Kwik Trip, Buc-ee's, Pilot, Flying J, Love's, TA — but do
+  NOT restrict yourself to this list. Any visible brand name counts.
+  If you only see a logo without text, infer the brand only if it's
+  unmistakable; otherwise null.
 
 Return ONLY a JSON object matching this exact shape — no markdown, no commentary:
 {
@@ -39,12 +55,16 @@ Return ONLY a JSON object matching this exact shape — no markdown, no commenta
   "totalCost": number | null,
   "pricePerGallon": number | null,
   "octane": number | null,
+  "station": string | null,
   "uncertain": string | null
 }
 
-If you cannot confidently read a value, return null for that field and
-explain in "uncertain". If the image is not a fuel pump, return all nulls
-and put "Image does not appear to be a fuel pump display" in uncertain.`;
+Only populate "uncertain" when something is genuinely ambiguous — for
+example, if gallons or totalCost is unreadable, smudged, or partially
+obscured. Do NOT mention price per gallon, octane, or station being
+absent; those are optional. If the image is not a fuel pump at all,
+return all nulls and put "Image does not appear to be a fuel pump
+display" in uncertain.`;
 
 const USER_PROMPT = `Extract the values from this fuel pump display.
 Return JSON only.`;
@@ -120,6 +140,10 @@ export async function pumpOcr(
     totalCost: numOrNull(obj.totalCost),
     pricePerGallon: numOrNull(obj.pricePerGallon),
     octane: numOrNull(obj.octane),
+    station:
+      typeof obj.station === "string" && obj.station.trim().length > 0
+        ? obj.station.trim()
+        : null,
     uncertain:
       typeof obj.uncertain === "string" && obj.uncertain.length > 0
         ? obj.uncertain
