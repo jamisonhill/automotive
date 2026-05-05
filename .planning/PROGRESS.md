@@ -59,11 +59,62 @@ Commit: `a1d9536` — Phase 2: vehicles + used-car baseline
   that aborts hydration. Datetime field is now seeded server-stable and
   set to "now" only after the user accepts a photo (or manually).
 
-## Phase 4: Maintenance + Repairs [PENDING]
-- [ ] Unified ServiceEntry log (routine + repair + inspection + modification)
-- [ ] Component history view (per-component replacement timeline)
-- [ ] Warranty tracking dashboard
-- [ ] Issue / DTC log
+## Phase 4: Maintenance + Repairs [IN PROGRESS]
+
+Broken into five sub-phases. Order of attack: 4a → 4c → 4b → 4d → 4e.
+
+### 4a: ServiceEntry CRUD + receipts [DONE]
+- [x] Curated service-type catalog (`src/lib/service-types.ts`) — ~40 entries
+      grouped by category (routine/repair/inspection/modification/diagnostic)
+      with `defaultWarrantyMonths` hints on common parts. Includes `custom`
+      escape hatch with required customLabel.
+- [x] `serviceSchema` in `src/lib/validators.ts` (superRefine enforces
+      customLabel when serviceType==='custom').
+- [x] Receipt upload helper (`src/lib/receipts.ts`) — accepts JPEG/PNG/WebP/
+      HEIC/PDF, content-hashed filenames under `DATA_DIR/receipts`.
+- [x] `/api/receipts/[file]` route handler (mirrors `/api/photos`).
+- [x] Server actions: createServiceEntry, updateServiceEntry,
+      deleteServiceEntry (`src/app/actions/service.ts`). Each write mirrors
+      to OdometerReading. Receipt replace/remove semantics on update.
+- [x] Service form client component (`src/components/service-form.tsx`):
+      service-type picker (optgroup'd + Custom), category sync, cost split
+      with auto-derive (parts+labor=total), DIY toggle, parts/warranty,
+      oil-change-specific fields, repair narrative, receipt upload+preview.
+      Hydration-safe.
+- [x] List page with year-grouping + stats (`/vehicles/[id]/service`).
+- [x] Add page with odometer pre-fill (`/vehicles/[id]/service/new`).
+- [x] Edit/delete page (`/vehicles/[id]/service/[entryId]/edit`).
+- [x] `getVehicle` includes most-recent serviceEntry; vehicle dashboard
+      Service tile enabled with last-service date.
+- [x] Verified end-to-end on iPhone (catalog + custom, DIY + shop, oil
+      change preset, repair narrative, receipt upload).
+
+Commit: `0327078` — Phase 4a: ServiceEntry CRUD + receipts
+
+### 4c: Issue / DTC log [PENDING — RESUME HERE]
+- [ ] `issueSchema` in validators (status enum, dtcCodes parsing)
+- [ ] Server actions: createIssue, updateIssue, resolveIssue, deleteIssue
+- [ ] Issue form client component (symptom, DTC codes, status, notes)
+- [ ] Issue list page (`/vehicles/[id]/issues`) — filters by status
+- [ ] Add/edit pages
+- [ ] Link from a service entry → resolved issue (close the loop)
+- [ ] Vehicle dashboard "Issues & DTCs" tile enabled with open count
+
+### 4b: Service form polish [PENDING]
+- [ ] Apply `defaultWarrantyMonths` from catalog as a placeholder/default
+- [ ] Tighter conditional sections (e.g., warranty only for repairs)
+- [ ] Parts info presets per serviceType (oil filter PN suggestions, etc.)
+- [ ] Better visual hierarchy on long form
+
+### 4d: Component history view [PENDING]
+- [ ] `/vehicles/[id]/service/types/[serviceType]` — every entry of one
+      type, ordered chronologically, with miles-between-replacements stat
+- [ ] Linked from each entry's service-type label
+
+### 4e: Warranty tracking dashboard [PENDING]
+- [ ] `/vehicles/[id]/warranties` — active warranties with months-left
+      and miles-left countdown
+- [ ] "Expiring soon" surface on vehicle dashboard
 
 ## Phase 5: Tires [PENDING]
 - [ ] TireSet CRUD
