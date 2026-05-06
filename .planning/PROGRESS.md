@@ -59,7 +59,7 @@ Commit: `a1d9536` — Phase 2: vehicles + used-car baseline
   that aborts hydration. Datetime field is now seeded server-stable and
   set to "now" only after the user accepts a photo (or manually).
 
-## Phase 4: Maintenance + Repairs [IN PROGRESS]
+## Phase 4: Maintenance + Repairs [DONE]
 
 Broken into five sub-phases. Order of attack: 4a → 4c → 4b → 4d → 4e.
 
@@ -91,36 +91,109 @@ Broken into five sub-phases. Order of attack: 4a → 4c → 4b → 4d → 4e.
 
 Commit: `0327078` — Phase 4a: ServiceEntry CRUD + receipts
 
-### 4c: Issue / DTC log [PENDING — RESUME HERE]
-- [ ] `issueSchema` in validators (status enum, dtcCodes parsing)
-- [ ] Server actions: createIssue, updateIssue, resolveIssue, deleteIssue
-- [ ] Issue form client component (symptom, DTC codes, status, notes)
-- [ ] Issue list page (`/vehicles/[id]/issues`) — filters by status
-- [ ] Add/edit pages
-- [ ] Link from a service entry → resolved issue (close the loop)
-- [ ] Vehicle dashboard "Issues & DTCs" tile enabled with open count
+### 4c: Issue / DTC log [DONE]
+- [x] `issueSchema` in validators (status enum, dtcCodes parsing)
+- [x] Server actions: createIssue, updateIssue, deleteIssue (with
+      bidirectional ServiceEntry.resolvedIssueId sync)
+- [x] Issue form client component (symptom, DTC codes, status, notes,
+      conditional resolution section, hydration-safe)
+- [x] Issue list page (`/vehicles/[id]/issues`) with All / Open /
+      Monitoring / Resolved filter chips
+- [x] Add/edit pages
+- [x] Service entry link picker (resolution → service entry)
+- [x] Vehicle dashboard "Issues & DTCs" tile enabled with open count
+      badge
 
-### 4b: Service form polish [PENDING]
-- [ ] Apply `defaultWarrantyMonths` from catalog as a placeholder/default
-- [ ] Tighter conditional sections (e.g., warranty only for repairs)
-- [ ] Parts info presets per serviceType (oil filter PN suggestions, etc.)
-- [ ] Better visual hierarchy on long form
+Commit: `b6a90f5` — Phase 4c: issues / DTC log
 
-### 4d: Component history view [PENDING]
-- [ ] `/vehicles/[id]/service/types/[serviceType]` — every entry of one
-      type, ordered chronologically, with miles-between-replacements stat
-- [ ] Linked from each entry's service-type label
+### 4b: Service form polish [DONE]
+- [x] `defaultWarrantyMonths` auto-applies from catalog when warranty
+      field is empty; placeholder shows the default
+- [x] Warranty section: repair only (was: every category)
+- [x] Part info: inline for repair / modification / oil change;
+      collapsed `<details>` for routine; hidden for inspection +
+      diagnostic
+- [x] Brand suggestions via `<datalist>` populated from a
+      BRAND_SUGGESTIONS map (~25 service types, 4–6 brands each)
+- [x] Extracted PartInfoFields helper to keep inline + collapsed in
+      sync
 
-### 4e: Warranty tracking dashboard [PENDING]
-- [ ] `/vehicles/[id]/warranties` — active warranties with months-left
-      and miles-left countdown
-- [ ] "Expiring soon" surface on vehicle dashboard
+Commit: `877a018` — Phase 4b: service form polish
 
-## Phase 5: Tires [PENDING]
-- [ ] TireSet CRUD
-- [ ] Rotation log
-- [ ] Per-corner pressure log
-- [ ] Tread depth tracking with replacement projection
+### 4d: Component history view [DONE]
+- [x] `/vehicles/[id]/service/types/[serviceType]` — every entry of one
+      type, with miles + days deltas between occurrences and aggregate
+      stats (count, total spent, avg miles between, avg time between)
+- [x] Service-type label on the service log links to the history page
+      (with a small History icon). Custom entries excluded — each
+      customLabel may refer to a different thing.
+- [x] Two sibling links inside one Card: title row → history; body
+      row → edit. No nested anchors.
+
+Commit: `f2288b4` — Phase 4d: component history view
+
+### 4e: Warranty tracking dashboard [DONE]
+- [x] `src/lib/warranties.ts` — computeWarrantyStatus +
+      EXPIRING_DAYS_LEFT (90) / EXPIRING_MILES_LEFT (2000) thresholds
+- [x] `/vehicles/[id]/warranties` — Active / Expiring soon / Expired
+      filter chips (default = Active), per-warranty cards with two-up
+      countdown tiles (time + miles)
+- [x] Sort within each filter = earliest expiration first
+- [x] getVehicle returns warrantySummary {active, expiring, expired}
+- [x] Dashboard "Warranties" tile (ShieldCheck) — turns warning-orange
+      with count badge when there's anything expiring soon, deep-jumps
+      to ?filter=expiring
+
+Commit: `5cfc50a` — Phase 4e: warranty tracking dashboard
+
+## Phase 5: Tires [IN PROGRESS]
+
+Sub-phased: 5a → 5b → 5c.
+
+### 5a: TireSet CRUD + dashboard tile [DONE]
+- [x] `tireSetSchema` (create/edit) + `tireSetRemovalSchema` in
+      validators. closePreviousSet toggle for replacing-current flow.
+- [x] Server actions in `src/app/actions/tires.ts`:
+      createTireSet (auto-closes prev active when toggle is on,
+      mirrors install to OdometerReading),
+      updateTireSet (keeps install-time odometer reading in sync),
+      removeTireSet (stamps removedAt + removeMileage + reason,
+      appends `[Removed]` note, mirrors a tire_remove odometer reading),
+      deleteTireSet (drops linked odometer rows; pressure/tread cascade
+      via schema)
+- [x] `tire-set-form.tsx` (TireSetForm + TireSetRemovalForm)
+- [x] Pages: `/vehicles/[id]/tires` (Current + Other active +
+      History), `/tires/new`, `/tires/[setId]/edit` (edit + conditional
+      remove + delete)
+- [x] getVehicle includes `tireSets` filtered to active set
+- [x] Vehicle dashboard "Tires" tile is live, shows brand/model/size
+      of current set or empty-state copy
+
+Commit: `4418b60` — Phase 5a: TireSet CRUD + dashboard tile
+
+### 5b: Per-corner pressure log [PENDING — RESUME HERE]
+- [ ] `pressureLogSchema` in validators — recordedAt, ambientF, all
+      8 PSI fields (FL/FR/RL/RR × Before/After), tireSetId optional
+- [ ] Server actions: createPressureLog, updatePressureLog,
+      deletePressureLog
+- [ ] Pressure form client component — 4-corner grid for before/after
+      PSI; "after" disabled if user marks check-only
+- [ ] Pressure list page (`/vehicles/[id]/tires/pressures`) — most-
+      recent log up top, history below
+- [ ] Add / edit pages
+- [ ] Surface latest log on the Tires Current set card
+
+### 5c: Tread depth log + replacement projection [PENDING]
+- [ ] `treadDepthLogSchema` in validators — recordedAt, mileage,
+      4 corners (32nds), notes
+- [ ] Server actions: createTreadDepthLog, updateTreadDepthLog,
+      deleteTreadDepthLog
+- [ ] Tread form client component — 4-corner grid in 32nds with
+      visual hint (full = 10/32, replace at 2/32)
+- [ ] Tread list/timeline page (`/vehicles/[id]/tires/[setId]/tread`)
+- [ ] Replacement projection: linear regression of min-corner depth vs
+      mileage → estimated mileage at 2/32 ("approximately X mi to go")
+- [ ] Surface projection on the Tires Current set card
 
 ## Phase 6: Reminders [PENDING]
 - [ ] Interval-based reminder engine
