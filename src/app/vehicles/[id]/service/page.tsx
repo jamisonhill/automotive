@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, Wrench } from "lucide-react";
+import { ChevronRight, History, Plus, Wrench } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -112,41 +112,61 @@ export default async function ServicePage({
               <h2 className="text-xs font-semibold uppercase tracking-wider text-fg-secondary">
                 {year}
               </h2>
-              {list.map((e) => (
-                <Link
-                  key={e.id}
-                  href={`/vehicles/${vehicle.id}/service/${e.id}/edit`}
-                  className="block"
-                >
-                  <Card className="flex items-center gap-3 p-3 active:bg-bg-overlay">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <p className="font-semibold text-fg-primary truncate">
-                          {serviceLabel(e.serviceType, e.customLabel)}
-                        </p>
-                        <p className="text-xs text-fg-muted shrink-0">
-                          {formatDate(e.performedAt)}
-                        </p>
-                      </div>
-                      <p className="text-xs text-fg-secondary">
-                        {e.odometer.toLocaleString()} mi ·{" "}
-                        {e.totalCost != null
-                          ? `$${e.totalCost.toFixed(2)}`
-                          : "—"}{" "}
-                        · {e.diy ? "DIY" : (e.shopName ?? "Shop")}
-                      </p>
-                      {e.partBrand && (
-                        <p className="text-xs text-fg-muted truncate">
-                          {[e.partBrand, e.partNumber]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
+              {list.map((e) => {
+                // Custom entries don't roll up into a meaningful history
+                // (each customLabel could refer to a different thing).
+                // Only catalog-typed entries get a history link on the
+                // service-type label.
+                const hasHistory = e.serviceType !== "custom";
+                const label = serviceLabel(e.serviceType, e.customLabel);
+                return (
+                  <Card key={e.id} className="overflow-hidden p-0">
+                    {/* Title row — type label is the link to component
+                        history; date sits beside it as plain text. */}
+                    <div className="flex items-baseline justify-between gap-2 px-3 pt-3">
+                      {hasHistory ? (
+                        <Link
+                          href={`/vehicles/${vehicle.id}/service/types/${e.serviceType}`}
+                          className="inline-flex items-center gap-1 font-semibold text-fg-primary truncate hover:text-accent active:text-accent"
+                        >
+                          <span className="truncate">{label}</span>
+                          <History className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
+                        </Link>
+                      ) : (
+                        <span className="font-semibold text-fg-primary truncate">
+                          {label}
+                        </span>
                       )}
+                      <span className="text-xs text-fg-muted shrink-0">
+                        {formatDate(e.performedAt)}
+                      </span>
                     </div>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
+                    {/* Body row — links to the edit page. */}
+                    <Link
+                      href={`/vehicles/${vehicle.id}/service/${e.id}/edit`}
+                      className="flex items-center gap-3 px-3 pb-3 pt-1 active:bg-bg-overlay"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-fg-secondary">
+                          {e.odometer.toLocaleString()} mi ·{" "}
+                          {e.totalCost != null
+                            ? `$${e.totalCost.toFixed(2)}`
+                            : "—"}{" "}
+                          · {e.diy ? "DIY" : (e.shopName ?? "Shop")}
+                        </p>
+                        {e.partBrand && (
+                          <p className="text-xs text-fg-muted truncate">
+                            {[e.partBrand, e.partNumber]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" />
+                    </Link>
                   </Card>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           ))}
         </div>
