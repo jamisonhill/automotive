@@ -259,6 +259,35 @@ export const serviceSchema = z
 
 export type ServiceInput = z.infer<typeof serviceSchema>;
 
+// =============================================================================
+// Issue / DTC log
+// =============================================================================
+export const issueSchema = z.object({
+  // Required: a one-line symptom and a status
+  symptom: z.string().min(1, "Symptom is required"),
+  status: z.enum(["open", "monitoring", "resolved"]),
+
+  // When the issue was first noticed
+  reportedAt: z.coerce.date(),
+  reportedMileage: optNonNegInt,
+
+  // Diagnosis is free-text and optional. DTC codes come in as raw text
+  // (comma- or whitespace-separated). The action normalizes them to a
+  // canonical "P0301,P0302" form before save.
+  diagnosis: optStr,
+  dtcCodes: optStr,
+
+  // Resolution — only meaningful when status === "resolved". The form lets
+  // the user link to a ServiceEntry that fixed it; on save the action also
+  // sets ServiceEntry.resolvedIssueId in the other direction.
+  resolvedAt: optDate,
+  resolvedServiceEntryId: optStr,
+
+  notes: optStr,
+});
+
+export type IssueInput = z.infer<typeof issueSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };

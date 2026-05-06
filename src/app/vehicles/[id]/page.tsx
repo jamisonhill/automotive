@@ -1,9 +1,9 @@
 import {
+  AlertCircle,
   AlertTriangle,
   Car,
   ChevronRight,
   Disc,
-  Droplet,
   Fuel,
   Gauge,
   Pencil,
@@ -42,6 +42,7 @@ export default async function VehicleDetailPage({
   const hasBaseline = vehicle.baseline != null;
   const lastFuel = vehicle.fuelEntries[0] ?? null;
   const lastService = vehicle.serviceEntries[0] ?? null;
+  const openIssues = vehicle.openIssueCount;
 
   return (
     <main className="mx-auto max-w-md px-4 py-4">
@@ -135,10 +136,21 @@ export default async function VehicleDetailPage({
           disabled
         />
         <SectionTile
-          icon={<Droplet className="h-5 w-5 text-fg-muted" />}
+          href={`/vehicles/${vehicle.id}/issues`}
+          icon={
+            <AlertCircle
+              className={`h-5 w-5 ${
+                openIssues > 0 ? "text-warning" : "text-accent"
+              }`}
+            />
+          }
           title="Issues & DTCs"
-          description="Coming in Phase 4"
-          disabled
+          description={
+            openIssues > 0
+              ? `${openIssues} open`
+              : "Track symptoms, DTCs, and resolutions"
+          }
+          badge={openIssues > 0 ? openIssues : undefined}
         />
         <SectionTile
           icon={<Gauge className="h-5 w-5 text-fg-muted" />}
@@ -182,6 +194,7 @@ interface SectionTileProps {
   title: string;
   description: string;
   disabled?: boolean;
+  badge?: number;
 }
 
 function SectionTile({
@@ -190,6 +203,7 @@ function SectionTile({
   title,
   description,
   disabled,
+  badge,
 }: SectionTileProps) {
   const inner = (
     <Card
@@ -202,6 +216,11 @@ function SectionTile({
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </div>
+      {badge != null && badge > 0 && (
+        <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-warning/15 px-2 text-xs font-semibold text-warning">
+          {badge}
+        </span>
+      )}
       {!disabled && (
         <ChevronRight className="h-5 w-5 shrink-0 text-fg-muted" />
       )}
