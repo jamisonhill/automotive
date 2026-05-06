@@ -45,6 +45,7 @@ export default async function VehicleDetailPage({
   const lastService = vehicle.serviceEntries[0] ?? null;
   const openIssues = vehicle.openIssueCount;
   const warranties = vehicle.warrantySummary;
+  const currentTires = vehicle.tireSets[0] ?? null;
 
   return (
     <main className="mx-auto max-w-md px-4 py-4">
@@ -155,10 +156,14 @@ export default async function VehicleDetailPage({
           badge={warranties.expiring > 0 ? warranties.expiring : undefined}
         />
         <SectionTile
-          icon={<Disc className="h-5 w-5 text-fg-muted" />}
+          href={`/vehicles/${vehicle.id}/tires`}
+          icon={<Disc className="h-5 w-5 text-accent" />}
           title="Tires"
-          description="Coming in Phase 5"
-          disabled
+          description={
+            currentTires
+              ? `${currentTires.brand} ${currentTires.model} · ${currentTires.size}`
+              : "Track installs, rotations, pressures"
+          }
         />
         <SectionTile
           href={`/vehicles/${vehicle.id}/issues`}

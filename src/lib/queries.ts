@@ -49,6 +49,15 @@ export async function getVehicle(id: string) {
         orderBy: { performedAt: "desc" },
         take: 1,
       },
+      // Currently-installed tire set (if any) for the dashboard tile.
+      // At most one row should be returned because the install workflow
+      // auto-closes the previous active set, but we still take[1] as a
+      // safety net for the auxiliary-active edge case.
+      tireSets: {
+        where: { removedAt: null },
+        orderBy: { installedAt: "desc" },
+        take: 1,
+      },
     },
   });
   if (!vehicle) return null;

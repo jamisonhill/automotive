@@ -288,6 +288,56 @@ export const issueSchema = z.object({
 
 export type IssueInput = z.infer<typeof issueSchema>;
 
+// =============================================================================
+// Tire set
+// =============================================================================
+export const tireSetSchema = z.object({
+  // Required identification
+  brand: z.string().min(1, "Brand is required"),
+  model: z.string().min(1, "Model is required"),
+  // Size like "225/65R17". We accept any non-empty string here — strict
+  // format validation belongs at the UI hint level, not the schema.
+  size: z.string().min(1, "Size is required"),
+
+  // Optional spec fields
+  loadIndex: optStr,
+  speedRating: optStr,
+  treadwear: optNonNegInt, // UTQG treadwear rating
+
+  // Required install context
+  installedAt: z.coerce.date(),
+  installMileage: z.coerce.number().int().min(0),
+
+  // Optional purchase / financial info
+  cost: optNonNegFloat,
+  notes: optStr,
+
+  // "Replacing my current tires" toggle (only used on create) — when on,
+  // the create action auto-closes any active set with the new install
+  // date/mileage so the user doesn't have to do it as a separate step.
+  closePreviousSet: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean().default(false)
+  ),
+});
+
+export type TireSetInput = z.infer<typeof tireSetSchema>;
+
+// Form payload for the "mark this set as removed" action — separate from
+// edit because it's a discrete event the user takes when they swap
+// tires off the car (sold, worn out, switching seasonal, etc.).
+export const tireSetRemovalSchema = z.object({
+  removedAt: z.coerce.date(),
+  removeMileage: z.coerce.number().int().min(0),
+  removeReason: z.preprocess(
+    blankToUndef,
+    z.enum(["worn", "damage", "upgrade", "seasonal"]).optional()
+  ),
+  removeNotes: optStr,
+});
+
+export type TireSetRemovalInput = z.infer<typeof tireSetRemovalSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };
