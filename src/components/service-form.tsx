@@ -11,8 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   SERVICE_CATEGORIES,
   type ServiceCategory,
-  serviceTypesByCategory,
+  getBrandSuggestions,
   getServiceTypeById,
+  serviceTypesByCategory,
 } from "@/lib/service-types";
 
 /*
@@ -110,6 +111,12 @@ export function ServiceForm({
   // DIY/shop toggle. When DIY is on we hide the shop name field.
   const [diy, setDiy] = useState<boolean>(defaults?.diy ?? false);
 
+  // Warranty months as controlled state so we can auto-fill from the
+  // catalog default when the user picks a known service type.
+  const [warrantyMonths, setWarrantyMonths] = useState<string>(
+    defaults?.warrantyMonths != null ? String(defaults.warrantyMonths) : ""
+  );
+
   // Receipt UI: existing receipt is shown with a "remove" toggle. If the
   // user attaches a new file, the server replaces the old one on save.
   const [removeReceipt, setRemoveReceipt] = useState<boolean>(false);
@@ -118,20 +125,34 @@ export function ServiceForm({
   // so we don't rebuild on every keystroke.
   const groups = useMemo(() => serviceTypesByCategory(), []);
 
+  // Brand suggestions for the part-brand <datalist>, scoped to whichever
+  // service type is currently selected. Empty array = no datalist rendered.
+  const brandSuggestions = useMemo(
+    () => getBrandSuggestions(serviceType),
+    [serviceType]
+  );
+
   /**
-   * When the user picks a service type from the dropdown, snap the
-   * category to that type's catalog default. They can still change it
-   * afterward (the category field is editable), but most users won't
-   * need to.
+   * When the user picks a service type from the dropdown:
+   *   - Snap category to that type's catalog default.
+   *   - Apply defaultWarrantyMonths if the warranty field is empty (don't
+   *     stomp on a value the user already typed).
+   * They can still change either afterward.
    */
   function handleServiceTypeChange(id: string) {
     setServiceType(id);
     if (id === "custom") {
-      // Leave category alone — user picks for custom entries.
+      // Leave category and warranty alone — user picks for custom entries.
       return;
     }
     const def = getServiceTypeById(id);
-    if (def) setCategory(def.category);
+    if (def) {
+      setCategory(def.category);
+      // Only auto-fill if the user hasn't already entered a warranty value.
+      if (def.defaultWarrantyMonths != null && warrantyMonths === "") {
+        setWarrantyMonths(String(def.defaultWarrantyMonths));
+      }
+    }
   }
 
   /**
@@ -162,7 +183,31 @@ export function ServiceForm({
 
   const isOilChange = serviceType === "oil_change";
   const isRepair = category === "repair";
+  const isModification = category === "modification";
+  const isInspection = category === "inspection";
+  const isDiagnostic = category === "diagnostic";
   const isCustom = serviceType === "custom";
+
+  // Section visibility rules (Phase 4b — tighter conditional sections):
+  //   - Warranty: only useful for repairs (where you're tracking part
+  //     warranties on something that broke). Not shown for routine,
+  //     inspections, modifications (typically aftermarket, no OEM
+  //     warranty), or diagnostics.
+  //   - Part info: inline for repair + modification + oil_change (where
+  //     the brand/part-number/supplier of the part is meaningful). For
+  //     routine, hidden behind a disclosure so the form is shorter.
+  //     Hidden entirely for inspection + diagnostic (no part).
+  const showWarranty = isRepair;
+  const showPartInfoInline = isRepair || isModification || isOilChange;
+  const showPartInfoCollapsed =
+    !showPartInfoInline && !isInspection && !isDiagnostic;
+
+  // Selected catalog entry (if any) — used for warranty placeholder hint.
+  const selectedDef = useMemo(
+    () => (serviceType ? getServiceTypeById(serviceType) : undefined),
+    [serviceType]
+  );
+  const warrantyDefault = selectedDef?.defaultWarrantyMonths;
 
   return (
     <form action={action} className="space-y-6">
@@ -303,54 +348,83 @@ export function ServiceForm({
         )}
       </Section>
 
-      <Section title="Part info" description="Optional — useful for repairs and parts you want to track.">
-        <Field label="Brand">
-          <Input name="partBrand" defaultValue={defaults?.partBrand ?? ""} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Part number">
-            <Input
-              name="partNumber"
-              defaultValue={defaults?.partNumber ?? ""}
-            />
-          </Field>
-          <Field label="Condition">
-            <Select
-              name="partCondition"
-              defaultValue={defaults?.partCondition ?? ""}
-            >
-              <option value="">—</option>
-              <option value="new">New</option>
-              <option value="reman">Remanufactured</option>
-              <option value="used">Used</option>
-            </Select>
-          </Field>
-        </div>
-        <Field label="Supplier" hint="Where you bought the part">
-          <Input name="supplier" defaultValue={defaults?.supplier ?? ""} />
-        </Field>
-      </Section>
+      {/*
+       * Part-brand suggestions. Rendered once at form level; each
+       * brand input that wants suggestions points at this list via
+       * `list="part-brand-suggestions"`. iOS Safari supports datalist.
+       */}
+      {brandSuggestions.length > 0 && (
+        <datalist id="part-brand-suggestions">
+          {brandSuggestions.map((b) => (
+            <option key={b} value={b} />
+          ))}
+        </datalist>
+      )}
 
-      <Section title="Warranty" description="Set whichever the part comes with.">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Months">
-            <Input
-              name="warrantyMonths"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              defaultValue={defaults?.warrantyMonths ?? ""}
+      {/* Part info — inline for repair / modification / oil change. */}
+      {showPartInfoInline && (
+        <Section
+          title="Part info"
+          description="What you put in. Tap the brand field for common options."
+        >
+          <PartInfoFields
+            defaults={defaults}
+            hasBrandSuggestions={brandSuggestions.length > 0}
+          />
+        </Section>
+      )}
+
+      {/* Part info — collapsed disclosure for routine work. */}
+      {showPartInfoCollapsed && (
+        <details className="group rounded-md border border-border-subtle bg-bg-elevated">
+          <summary className="flex cursor-pointer items-center justify-between px-3 py-3 text-sm font-medium text-fg-secondary">
+            <span>Part info (optional)</span>
+            <span className="text-xs text-fg-muted group-open:hidden">
+              Tap to add brand, supplier, etc.
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-border-subtle px-3 py-3">
+            <PartInfoFields
+              defaults={defaults}
+              hasBrandSuggestions={brandSuggestions.length > 0}
             />
-          </Field>
-          <Field label="Miles">
-            <Input
-              name="warrantyMiles"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              defaultValue={defaults?.warrantyMiles ?? ""}
-            />
-          </Field>
-        </div>
-      </Section>
+          </div>
+        </details>
+      )}
+
+      {showWarranty && (
+        <Section
+          title="Warranty"
+          description={
+            warrantyDefault != null
+              ? `${warrantyDefault}-month default applied — change or clear if it doesn't match.`
+              : "Set whichever the part comes with."
+          }
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Months">
+              <Input
+                name="warrantyMonths"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={warrantyMonths}
+                onChange={(e) => setWarrantyMonths(e.target.value)}
+                placeholder={
+                  warrantyDefault != null ? String(warrantyDefault) : undefined
+                }
+              />
+            </Field>
+            <Field label="Miles">
+              <Input
+                name="warrantyMiles"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                defaultValue={defaults?.warrantyMiles ?? ""}
+              />
+            </Field>
+          </div>
+        </Section>
+      )}
 
       {isOilChange && (
         <Section title="Oil change details">
@@ -461,5 +535,54 @@ export function ServiceForm({
         {submitLabel}
       </Button>
     </form>
+  );
+}
+
+/**
+ * Shared part-info fields. Rendered inline for repair/modification/oil
+ * changes, and inside a <details> disclosure for routine work — pulled
+ * out so both call sites stay in sync.
+ */
+function PartInfoFields({
+  defaults,
+  hasBrandSuggestions,
+}: {
+  defaults?: ServiceDefaults;
+  hasBrandSuggestions: boolean;
+}) {
+  return (
+    <>
+      <Field
+        label="Brand"
+        hint={hasBrandSuggestions ? "Tap field for suggestions" : undefined}
+      >
+        <Input
+          name="partBrand"
+          defaultValue={defaults?.partBrand ?? ""}
+          // Wire to the form-level <datalist> only when we actually rendered
+          // one; otherwise iOS shows a useless empty popover on focus.
+          list={hasBrandSuggestions ? "part-brand-suggestions" : undefined}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Part number">
+          <Input name="partNumber" defaultValue={defaults?.partNumber ?? ""} />
+        </Field>
+        <Field label="Condition">
+          <Select
+            name="partCondition"
+            defaultValue={defaults?.partCondition ?? ""}
+          >
+            <option value="">—</option>
+            <option value="new">New</option>
+            <option value="reman">Remanufactured</option>
+            <option value="used">Used</option>
+          </Select>
+        </Field>
+      </div>
+      <Field label="Supplier" hint="Where you bought the part">
+        <Input name="supplier" defaultValue={defaults?.supplier ?? ""} />
+      </Field>
+    </>
   );
 }

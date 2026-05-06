@@ -113,6 +113,68 @@ export function serviceLabel(
 }
 
 /**
+ * Suggested part brands per service type. These are *suggestions* surfaced
+ * via a <datalist> on the part-brand input — not a closed list. The user
+ * can still type whatever they want.
+ *
+ * Aim for 4–6 widely-recognized brands per type, plus "OEM" where it's a
+ * meaningful option. Order matters: most popular first.
+ *
+ * If a service type isn't in this map, the brand input has no suggestions
+ * (which is fine — most tool-like service types don't have a "part brand").
+ */
+const BRAND_SUGGESTIONS: Record<string, string[]> = {
+  // Routine — fluids and consumables
+  oil_change: ["Mobil 1", "Pennzoil", "Castrol", "Valvoline", "Royal Purple", "OEM"],
+  air_filter: ["K&N", "Fram", "WIX", "Bosch", "OEM"],
+  cabin_filter: ["Bosch", "WIX", "Fram", "K&N", "OEM"],
+  wiper_blades: ["Bosch", "Rain-X", "Trico", "Michelin", "OEM"],
+  spark_plugs: ["NGK", "Denso", "Bosch", "Champion", "OEM"],
+  serpentine_belt: ["Gates", "Goodyear", "Continental", "Dayco", "OEM"],
+  timing_belt: ["Gates", "Continental", "Aisin", "OEM"],
+  fuel_filter: ["WIX", "Bosch", "Mahle", "OEM"],
+  brake_fluid_flush: ["Motul", "ATE", "Castrol", "Bosch", "OEM"],
+  coolant_flush: ["Prestone", "Zerex", "Peak", "OEM"],
+  transmission_flush: ["Valvoline", "Castrol", "Mobil", "Amsoil", "OEM"],
+  diff_fluid: ["Mobil 1", "Royal Purple", "Amsoil", "Red Line", "OEM"],
+  power_steering_flush: ["Lubegard", "Prestone", "OEM"],
+
+  // Repairs — wear parts and major components
+  battery: ["Optima", "Interstate", "DieHard", "Duralast", "AC Delco", "Bosch", "OEM"],
+  alternator: ["Denso", "Bosch", "AC Delco", "Remanufactured", "OEM"],
+  starter: ["Denso", "Bosch", "AC Delco", "Remanufactured", "OEM"],
+  brake_pads: ["Akebono", "Bosch", "EBC", "PowerStop", "Wagner", "OEM"],
+  brake_rotors: ["Brembo", "Bosch", "PowerStop", "Wagner", "Centric", "OEM"],
+  brake_calipers: ["Centric", "Wagner", "Cardone", "OEM"],
+  shocks_struts: ["Bilstein", "KYB", "Monroe", "Koni", "OEM"],
+  control_arm: ["Moog", "Mevotech", "Dorman", "OEM"],
+  wheel_bearing: ["Timken", "SKF", "Moog", "OEM"],
+  cv_axle: ["GSP", "SurTrack", "Cardone", "OEM"],
+  water_pump: ["Aisin", "Gates", "Bosch", "Denso", "OEM"],
+  thermostat: ["Stant", "Gates", "Motorcraft", "OEM"],
+  radiator: ["Denso", "Mishimoto", "Spectra", "Koyorad", "OEM"],
+  ac_compressor: ["Denso", "Four Seasons", "Cardone", "OEM"],
+  tires_replace: [
+    "Michelin",
+    "Continental",
+    "Bridgestone",
+    "Goodyear",
+    "Pirelli",
+    "Falken",
+    "Kumho",
+    "BFGoodrich",
+  ],
+};
+
+/**
+ * Returns brand suggestions for a service type, or an empty array.
+ * Used to populate the <datalist> behind the part-brand input.
+ */
+export function getBrandSuggestions(serviceType: string): string[] {
+  return BRAND_SUGGESTIONS[serviceType] ?? [];
+}
+
+/**
  * Group service types by category for rendering inside an optgroup-style
  * dropdown. Excludes the "custom" entry (callers add it as a separate option
  * at the bottom of the picker).
