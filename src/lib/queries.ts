@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { computeWarrantyStatus } from "@/lib/warranties";
 
 /*
  * Read helpers used by server components.
@@ -58,5 +59,38 @@ export async function getVehicle(id: string) {
     where: { vehicleId: id, status: { in: ["open", "monitoring"] } },
   });
 
-  return { ...vehicle, openIssueCount };
+  // Warranty summary — counts of active / expiring / expired across all
+  // service entries with warranty data. The dashboard tile uses these,
+  // so we compute once here instead of refetching from the tile.
+  const warrantyEntries = await prisma.serviceEntry.findMany({
+    where: {
+      vehicleId: id,
+      OR: [
+        { warrantyMonths: { not: null } },
+        { warrantyMiles: { not: null } },
+      ],
+    },
+  });
+  const currentMiles = vehicle.odometerReadings[0]?.miles ?? null;
+  const now = new Date();
+  let activeWarranties = 0;
+  let expiringWarranties = 0;
+  let expiredWarranties = 0;
+  for (const e of warrantyEntries) {
+    const w = computeWarrantyStatus(e, currentMiles, now);
+    if (!w) continue;
+    if (w.status === "active") activeWarranties += 1;
+    else if (w.status === "expiring") expiringWarranties += 1;
+    else expiredWarranties += 1;
+  }
+
+  return {
+    ...vehicle,
+    openIssueCount,
+    warrantySummary: {
+      active: activeWarranties,
+      expiring: expiringWarranties,
+      expired: expiredWarranties,
+    },
+  };
 }

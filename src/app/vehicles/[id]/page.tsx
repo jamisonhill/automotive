@@ -7,6 +7,7 @@ import {
   Fuel,
   Gauge,
   Pencil,
+  ShieldCheck,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -43,6 +44,7 @@ export default async function VehicleDetailPage({
   const lastFuel = vehicle.fuelEntries[0] ?? null;
   const lastService = vehicle.serviceEntries[0] ?? null;
   const openIssues = vehicle.openIssueCount;
+  const warranties = vehicle.warrantySummary;
 
   return (
     <main className="mx-auto max-w-md px-4 py-4">
@@ -128,6 +130,29 @@ export default async function VehicleDetailPage({
                 })}`
               : "Log oil changes, repairs, inspections"
           }
+        />
+        <SectionTile
+          href={`/vehicles/${vehicle.id}/warranties${
+            warranties.expiring > 0 ? "?filter=expiring" : ""
+          }`}
+          icon={
+            <ShieldCheck
+              className={`h-5 w-5 ${
+                warranties.expiring > 0 ? "text-warning" : "text-accent"
+              }`}
+            />
+          }
+          title="Warranties"
+          description={
+            warranties.active === 0 &&
+            warranties.expiring === 0 &&
+            warranties.expired === 0
+              ? "No warranties tracked yet"
+              : warranties.expiring > 0
+                ? `${warranties.expiring} expiring soon · ${warranties.active} active`
+                : `${warranties.active} active`
+          }
+          badge={warranties.expiring > 0 ? warranties.expiring : undefined}
         />
         <SectionTile
           icon={<Disc className="h-5 w-5 text-fg-muted" />}
