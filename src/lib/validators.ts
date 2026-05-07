@@ -406,6 +406,40 @@ export const pressureLogSchema = z
 
 export type PressureLogInput = z.infer<typeof pressureLogSchema>;
 
+// =============================================================================
+// Tread depth log (per-corner reading at a known mileage)
+// =============================================================================
+
+// 32nds of an inch. Passenger tires start ~10/32 (some performance/winter at
+// 11–12), legal-replace threshold is 2/32 in most US states. We allow 0–20
+// to leave headroom for unusual tires; values above 20 are typos.
+const reqTread = z.coerce.number().int().min(0).max(20);
+
+export const treadDepthLogSchema = z.object({
+  // Required: when this reading was taken. Mirrors the recordedAt pattern
+  // used by every other event-style entity (fuel, service, pressure).
+  recordedAt: z.coerce.date(),
+
+  // Required: odometer at time of measurement. Authoritative for the
+  // replacement-projection regression — without a mileage we can't fit
+  // the line. The action also mirrors this to the OdometerReading
+  // timeline so the canonical mileage feed picks it up.
+  mileage: z.coerce.number().int().min(0),
+
+  // All 4 corners required. The DB model has them as non-null Ints, and
+  // a partial reading would silently break the min-corner regression
+  // (a missing corner could be the worst one). If the user only checked
+  // one corner they should re-measure rather than save a half row.
+  fl: reqTread,
+  fr: reqTread,
+  rl: reqTread,
+  rr: reqTread,
+
+  notes: optStr,
+});
+
+export type TreadDepthLogInput = z.infer<typeof treadDepthLogSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };

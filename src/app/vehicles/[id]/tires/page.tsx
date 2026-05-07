@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import {
+  minCorner,
+  projectReplacement,
+  type TreadProjection,
+} from "@/lib/tread-projection";
 
 /*
  * Tires list — current set up top, history below.
@@ -62,6 +67,27 @@ export default async function TiresPage({
         orderBy: { recordedAt: "desc" },
       })
     : null;
+
+  // Tread depth surface — pull all readings for the current set so we
+  // can both show the latest min depth and project a replacement
+  // mileage. The projection function handles the "fewer than 2"
+  // case internally; we always call it and let it return a status.
+  const currentTreadLogs = current
+    ? await prisma.treadDepthLog.findMany({
+        where: { tireSetId: current.id },
+        orderBy: { recordedAt: "desc" },
+        select: { fl: true, fr: true, rl: true, rr: true, mileage: true },
+      })
+    : [];
+  const latestTreadMin =
+    currentTreadLogs.length > 0 ? minCorner(currentTreadLogs[0]) : null;
+  const treadProjection = projectReplacement(
+    currentTreadLogs.map((l) => ({
+      mileage: l.mileage,
+      minDepth: minCorner(l),
+    })),
+    currentMiles
+  );
   const auxiliaryActive = sets.filter(
     (s) => s.removedAt == null && s.id !== current?.id
   );
@@ -96,6 +122,8 @@ export default async function TiresPage({
           set={current}
           currentMiles={currentMiles}
           latestPressure={latestPressure}
+          latestTreadMin={latestTreadMin}
+          treadProjection={treadProjection}
         />
       ) : (
         <Card className="py-8 text-center">
@@ -150,6 +178,8 @@ function CurrentTireSetCard({
   set,
   currentMiles,
   latestPressure,
+  latestTreadMin,
+  treadProjection,
 }: {
   vehicleId: string;
   set: {
@@ -173,13 +203,17 @@ function CurrentTireSetCard({
     rlAfter: number | null;
     rrAfter: number | null;
   } | null;
+  latestTreadMin: number | null;
+  treadProjection: TreadProjection;
 }) {
   const milesOn =
     currentMiles != null ? Math.max(0, currentMiles - set.installMileage) : null;
   const monthsOn = monthsBetween(set.installedAt, new Date());
 
-  // Two sibling <Link>s inside one Card — never nest anchors. Top half
-  // jumps to edit; bottom "Last checked" row jumps to the pressure log.
+  // Sibling <Link>s inside one Card — never nest anchors. Top half jumps
+  // to set edit; the tread + pressure rows below each link to their own
+  // sub-pages. Order: tread first (the bigger picture — drives whether
+  // tires need replacing) then pressure (the routine check).
   return (
     <Card className="overflow-hidden">
       <Link
@@ -203,11 +237,91 @@ function CurrentTireSetCard({
           />
         </div>
       </Link>
+      <TreadSummaryRow
+        vehicleId={vehicleId}
+        setId={set.id}
+        latestMin={latestTreadMin}
+        projection={treadProjection}
+      />
       <PressureSummaryRow
         vehicleId={vehicleId}
         latestPressure={latestPressure}
       />
     </Card>
+  );
+}
+
+/**
+ * "Tread: 8/32 · ~12k mi to replace" row at the bottom of the Current
+ * card. When there's nothing logged, surfaces a CTA to start tracking.
+ */
+function TreadSummaryRow({
+  vehicleId,
+  setId,
+  latestMin,
+  projection,
+}: {
+  vehicleId: string;
+  setId: string;
+  latestMin: number | null;
+  projection: TreadProjection;
+}) {
+  const href = `/vehicles/${vehicleId}/tires/${setId}/tread`;
+
+  if (latestMin == null) {
+    return (
+      <Link
+        href={href}
+        className="block border-t border-border-subtle px-4 py-3 text-sm text-fg-secondary active:bg-bg-overlay"
+      >
+        Log tread depth →
+      </Link>
+    );
+  }
+
+  // Decide the projection blurb. We only show "X mi to replace" when
+  // we have a real fit; otherwise stay silent on projection (just show
+  // the latest min depth) so we don't promise data we don't have.
+  let projectionText: string | null = null;
+  let danger = false;
+  if (projection.kind === "ok") {
+    if (projection.milesRemaining < 0) {
+      projectionText = "past replacement";
+      danger = true;
+    } else {
+      projectionText = `~${formatMilesShort(projection.milesRemaining)} to replace`;
+    }
+  }
+
+  // Color the depth value by band — same logic as the timeline page.
+  const depthClass =
+    latestMin <= 2
+      ? "text-danger"
+      : latestMin <= 5
+        ? "text-warning"
+        : "text-fg-primary";
+
+  return (
+    <Link
+      href={href}
+      className="block border-t border-border-subtle px-4 py-3 active:bg-bg-overlay"
+    >
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-fg-secondary">
+          Tread{" "}
+          <span className={`tabular-nums font-semibold ${depthClass}`}>
+            {latestMin}/32
+          </span>
+        </span>
+        {projectionText && (
+          <span
+            className={`shrink-0 tabular-nums ${danger ? "text-danger" : "text-fg-primary"}`}
+          >
+            {projectionText}
+          </span>
+        )}
+      </div>
+    </Link>
   );
 }
 
@@ -373,6 +487,21 @@ function fmtPsi(v: number | null): string {
 /** "32/32" style two-corner summary used in the Current card row. */
 function pairText(a: number | null, b: number | null): string {
   return `${fmtPsi(a)}/${fmtPsi(b)}`;
+}
+
+/**
+ * Compact miles formatter for the Current card's tread row, where
+ * space is tight. 12,400 → "12k", 800 → "800". Rounded to the
+ * nearest 100 before bucketing so we don't imply false precision.
+ */
+function formatMilesShort(n: number): string {
+  const rounded = Math.round(n / 100) * 100;
+  if (rounded >= 1000) {
+    const k = rounded / 1000;
+    // 12,300 → "12k"; 1,500 → "1.5k". Avoid awkward "1.0k".
+    return Number.isInteger(k) ? `${k}k mi` : `${k.toFixed(1)}k mi`;
+  }
+  return `${rounded.toLocaleString()} mi`;
 }
 
 /**

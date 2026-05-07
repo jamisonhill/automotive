@@ -146,7 +146,7 @@ Commit: `f2288b4` — Phase 4d: component history view
 
 Commit: `5cfc50a` — Phase 4e: warranty tracking dashboard
 
-## Phase 5: Tires [IN PROGRESS]
+## Phase 5: Tires [DONE]
 
 Sub-phased: 5a → 5b → 5c.
 
@@ -194,19 +194,35 @@ Commit: `4418b60` — Phase 5a: TireSet CRUD + dashboard tile
 - [x] Build + typecheck clean
 - [x] Verified end-to-end on iPhone
 
-### 5c: Tread depth log + replacement projection [PENDING — RESUME HERE]
-- [ ] `treadDepthLogSchema` in validators — recordedAt, mileage,
-      4 corners (32nds), notes
-- [ ] Server actions: createTreadDepthLog, updateTreadDepthLog,
-      deleteTreadDepthLog
-- [ ] Tread form client component — 4-corner grid in 32nds with
-      visual hint (full = 10/32, replace at 2/32)
-- [ ] Tread list/timeline page (`/vehicles/[id]/tires/[setId]/tread`)
-- [ ] Replacement projection: linear regression of min-corner depth vs
-      mileage → estimated mileage at 2/32 ("approximately X mi to go")
-- [ ] Surface projection on the Tires Current set card
+### 5c: Tread depth log + replacement projection [DONE]
+- [x] `treadDepthLogSchema` in validators — recordedAt, mileage,
+      4 corners (0-20 in 32nds, all required), notes
+- [x] `src/lib/tread-projection.ts` — OLS linear regression of
+      min-corner depth vs mileage. Returns kind: ok | insufficient-data
+      | no-wear with projected mileage and miles-remaining.
+      treadBand() helper for color coding (good/wearing/replace).
+- [x] Server actions: createTreadDepthLog, updateTreadDepthLog,
+      deleteTreadDepthLog (`src/app/actions/tread-depth.ts`).
+      Mirrors to OdometerReading as `tread_check` for canonical
+      timeline. assertSetOwnership() defense on every action.
+- [x] Tread form client component — 4-corner 2x2 grid with live
+      color-coded badges that update as you type (Good/Wearing/Replace).
+      type="number" + min=0 max=20 so typos are blocked client-side
+      with a friendly tooltip instead of a server ZodError page.
+      Hydration-safe.
+- [x] Tread list/timeline page (`/vehicles/[id]/tires/[setId]/tread`)
+      — projection hero ("Replace in ~12k mi · low confidence" or
+      "past replacement" in red), latest reading card with color-coded
+      corners, history rows.
+- [x] Add / edit pages. Mileage pre-fills from latest odometer on
+      create.
+- [x] Surface tread on Tires Current set card. "Tread 8/32 · ~12k mi
+      to replace" or empty-state CTA. Three stacked sibling links
+      inside one Card (no nested anchors): edit / tread / pressure.
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone (including the typo-bounds fix)
 
-## Phase 6: Reminders [PENDING]
+## Phase 6: Reminders [PENDING — RESUME HERE]
 - [ ] Interval-based reminder engine
 - [ ] "Due soon" dashboard widget
 - [ ] Manufacturer default intervals seeded per vehicle
