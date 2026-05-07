@@ -171,19 +171,30 @@ Sub-phased: 5a → 5b → 5c.
 
 Commit: `4418b60` — Phase 5a: TireSet CRUD + dashboard tile
 
-### 5b: Per-corner pressure log [PENDING — RESUME HERE]
-- [ ] `pressureLogSchema` in validators — recordedAt, ambientF, all
-      8 PSI fields (FL/FR/RL/RR × Before/After), tireSetId optional
-- [ ] Server actions: createPressureLog, updatePressureLog,
-      deletePressureLog
-- [ ] Pressure form client component — 4-corner grid for before/after
-      PSI; "after" disabled if user marks check-only
-- [ ] Pressure list page (`/vehicles/[id]/tires/pressures`) — most-
-      recent log up top, history below
-- [ ] Add / edit pages
-- [ ] Surface latest log on the Tires Current set card
+### 5b: Per-corner pressure log [DONE]
+- [x] `pressureLogSchema` in validators — recordedAt, ambientF, all
+      8 PSI fields (FL/FR/RL/RR × Before/After), tireSetId optional.
+      superRefine enforces ≥1 Before PSI value.
+- [x] Server actions: createPressureLog, updatePressureLog,
+      deletePressureLog (`src/app/actions/tire-pressures.ts`).
+      Auto-binds tireSetId to active set when picker is blank;
+      cross-vehicle defense on explicit picks.
+- [x] Pressure form client component — 4-corner 2x2 grid mirroring
+      the car looking down. "I added air" toggle gates the After
+      column. Hydration-safe (no `new Date()` at render).
+- [x] Pressure list page (`/vehicles/[id]/tires/pressures`) — latest
+      log rendered as hero card with full 4-corner grid + before→after
+      deltas (green = added air, amber = leak/change). Older logs as
+      compact rows showing F-avg / R-avg.
+- [x] Add / edit pages. Edit page surfaces removed-but-linked sets in
+      the picker so historical links don't disappear.
+- [x] Surface latest log on the Tires Current set card. "Checked X
+      ago · F 32/32 · R 30/30" or empty-state CTA. Two sibling links
+      inside one Card (no nested anchors).
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
 
-### 5c: Tread depth log + replacement projection [PENDING]
+### 5c: Tread depth log + replacement projection [PENDING — RESUME HERE]
 - [ ] `treadDepthLogSchema` in validators — recordedAt, mileage,
       4 corners (32nds), notes
 - [ ] Server actions: createTreadDepthLog, updateTreadDepthLog,

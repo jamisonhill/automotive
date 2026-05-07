@@ -51,6 +51,17 @@ export default async function TiresPage({
   // The "current" pick — newest active set. Any other active sets fall
   // into the auxiliary list (e.g. seasonal swap).
   const current = sets.find((s) => s.removedAt == null) ?? null;
+
+  // Latest pressure log scoped to the current set, used to surface a
+  // "Last checked" row on the Current card. Scoped per-set (not per-
+  // vehicle) so a stale check from the previous set doesn't bleed into
+  // the new set after a seasonal swap.
+  const latestPressure = current
+    ? await prisma.tirePressureLog.findFirst({
+        where: { vehicleId: id, tireSetId: current.id },
+        orderBy: { recordedAt: "desc" },
+      })
+    : null;
   const auxiliaryActive = sets.filter(
     (s) => s.removedAt == null && s.id !== current?.id
   );
@@ -84,6 +95,7 @@ export default async function TiresPage({
           vehicleId={vehicle.id}
           set={current}
           currentMiles={currentMiles}
+          latestPressure={latestPressure}
         />
       ) : (
         <Card className="py-8 text-center">
@@ -137,6 +149,7 @@ function CurrentTireSetCard({
   vehicleId,
   set,
   currentMiles,
+  latestPressure,
 }: {
   vehicleId: string;
   set: {
@@ -149,17 +162,30 @@ function CurrentTireSetCard({
     cost: number | null;
   };
   currentMiles: number | null;
+  latestPressure: {
+    recordedAt: Date;
+    flBefore: number | null;
+    frBefore: number | null;
+    rlBefore: number | null;
+    rrBefore: number | null;
+    flAfter: number | null;
+    frAfter: number | null;
+    rlAfter: number | null;
+    rrAfter: number | null;
+  } | null;
 }) {
   const milesOn =
     currentMiles != null ? Math.max(0, currentMiles - set.installMileage) : null;
   const monthsOn = monthsBetween(set.installedAt, new Date());
 
+  // Two sibling <Link>s inside one Card — never nest anchors. Top half
+  // jumps to edit; bottom "Last checked" row jumps to the pressure log.
   return (
-    <Link
-      href={`/vehicles/${vehicleId}/tires/${set.id}/edit`}
-      className="block"
-    >
-      <Card className="p-4 active:bg-bg-overlay">
+    <Card className="overflow-hidden">
+      <Link
+        href={`/vehicles/${vehicleId}/tires/${set.id}/edit`}
+        className="block p-4 active:bg-bg-overlay"
+      >
         <p className="text-base font-semibold text-fg-primary">
           {set.brand} {set.model}
         </p>
@@ -176,7 +202,72 @@ function CurrentTireSetCard({
             sub={formatDate(set.installedAt)}
           />
         </div>
-      </Card>
+      </Link>
+      <PressureSummaryRow
+        vehicleId={vehicleId}
+        latestPressure={latestPressure}
+      />
+    </Card>
+  );
+}
+
+/**
+ * "Last checked: 3 days ago · F 32/32 · R 30/30" row at the bottom of
+ * the Current card. When there's no log, surfaces an empty-state CTA so
+ * the user discovers the feature without having to dig.
+ */
+function PressureSummaryRow({
+  vehicleId,
+  latestPressure,
+}: {
+  vehicleId: string;
+  latestPressure: {
+    recordedAt: Date;
+    flBefore: number | null;
+    frBefore: number | null;
+    rlBefore: number | null;
+    rrBefore: number | null;
+    flAfter: number | null;
+    frAfter: number | null;
+    rlAfter: number | null;
+    rrAfter: number | null;
+  } | null;
+}) {
+  const href = `/vehicles/${vehicleId}/tires/pressures`;
+
+  if (!latestPressure) {
+    return (
+      <Link
+        href={href}
+        className="block border-t border-border-subtle px-4 py-3 text-sm text-fg-secondary active:bg-bg-overlay"
+      >
+        Log tire pressures →
+      </Link>
+    );
+  }
+
+  // Prefer After when present (final state); otherwise Before. Same
+  // logic as the pressure-list compact row.
+  const fl = latestPressure.flAfter ?? latestPressure.flBefore;
+  const fr = latestPressure.frAfter ?? latestPressure.frBefore;
+  const rl = latestPressure.rlAfter ?? latestPressure.rlBefore;
+  const rr = latestPressure.rrAfter ?? latestPressure.rrBefore;
+  const front = pairText(fl, fr);
+  const rear = pairText(rl, rr);
+
+  return (
+    <Link
+      href={href}
+      className="block border-t border-border-subtle px-4 py-3 active:bg-bg-overlay"
+    >
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-fg-secondary">
+          Checked {timeAgo(latestPressure.recordedAt)}
+        </span>
+        <span className="text-fg-primary tabular-nums shrink-0">
+          F {front} · R {rear}
+        </span>
+      </div>
     </Link>
   );
 }
@@ -268,4 +359,37 @@ function formatDate(d: Date): string {
 function monthsBetween(a: Date, b: Date): number {
   const days = (b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
   return Math.max(0, Math.round(days / 30.4));
+}
+
+/**
+ * Short PSI for one corner — integer when whole, one decimal otherwise.
+ * "—" placeholder when the corner wasn't logged on this entry.
+ */
+function fmtPsi(v: number | null): string {
+  if (v == null) return "—";
+  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+/** "32/32" style two-corner summary used in the Current card row. */
+function pairText(a: number | null, b: number | null): string {
+  return `${fmtPsi(a)}/${fmtPsi(b)}`;
+}
+
+/**
+ * Coarse "X ago" formatter for the Current card.
+ * Reads naturally on a glance — "today", "yesterday", "3 days ago",
+ * "2 weeks ago", or a calendar date for older entries.
+ */
+function timeAgo(d: Date): string {
+  const days = Math.floor(
+    (Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 30) {
+    const wks = Math.floor(days / 7);
+    return wks === 1 ? "1 week ago" : `${wks} weeks ago`;
+  }
+  return formatDate(d);
 }

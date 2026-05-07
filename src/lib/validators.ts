@@ -338,6 +338,74 @@ export const tireSetRemovalSchema = z.object({
 
 export type TireSetRemovalInput = z.infer<typeof tireSetRemovalSchema>;
 
+// =============================================================================
+// Tire pressure log (per-corner check / fill event)
+// =============================================================================
+
+// Cold-fill PSI for passenger cars typically lands in the 25–50 range; trucks
+// and commercial vehicles climb higher. 0–150 is a generous outer bound — it
+// catches obvious typos ("300") without rejecting legitimate values.
+const optPsi = z.preprocess(
+  blankToUndef,
+  z.coerce.number().min(0).max(150).optional()
+);
+
+// Ambient °F: tire pressure is temperature-sensitive, so we record it. Bounds
+// chosen to catch typos (e.g. "750") while accepting real-world conditions.
+const optAmbientF = z.preprocess(
+  blankToUndef,
+  z.coerce.number().min(-50).max(150).optional()
+);
+
+export const pressureLogSchema = z
+  .object({
+    // Required: when this check happened
+    recordedAt: z.coerce.date(),
+
+    // Optional outdoor temperature at the time of the reading. Cold-fill PSI
+    // is the manufacturer spec, so ambient context is useful.
+    ambientF: optAmbientF,
+
+    // Optional link to a TireSet. The server action defaults to the vehicle's
+    // currently-active set when this is blank, so the user usually doesn't
+    // have to pick. Stays null only when there is no active set on file.
+    tireSetId: optStr,
+
+    // Before-fill PSI per corner. Independently optional, but at least one is
+    // required (enforced in superRefine below) so the row has actual data.
+    flBefore: optPsi,
+    frBefore: optPsi,
+    rlBefore: optPsi,
+    rrBefore: optPsi,
+
+    // After-fill PSI per corner. Independently optional — a check-only event
+    // (no air added) leaves all four blank, which is fine.
+    flAfter: optPsi,
+    frAfter: optPsi,
+    rlAfter: optPsi,
+    rrAfter: optPsi,
+
+    notes: optStr,
+  })
+  .superRefine((val, ctx) => {
+    // A row with zero Before readings carries no information. Force the user
+    // to enter at least one corner — the form UI defaults all four visible.
+    const anyBefore =
+      val.flBefore != null ||
+      val.frBefore != null ||
+      val.rlBefore != null ||
+      val.rrBefore != null;
+    if (!anyBefore) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter at least one Before PSI value (FL, FR, RL, or RR).",
+        path: ["flBefore"],
+      });
+    }
+  });
+
+export type PressureLogInput = z.infer<typeof pressureLogSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };
