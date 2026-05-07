@@ -1,110 +1,121 @@
 # Resume — Automotive
 
-**Paused:** 2026-05-05 (evening)
-**Reason:** Phase 5a (TireSet CRUD + dashboard tile) committed and
-verified end-to-end on iPhone. Clean stopping point before Phase 5b.
-**Phase:** 5 / 8 (sub-phase 5a done; 5b next)
-**Last commit:** `4418b60` — Phase 5a: TireSet CRUD + dashboard tile
+**Paused:** 2026-05-06 (evening)
+**Reason:** Phase 6a (Reminder CRUD + status engine) committed and
+verified end-to-end on iPhone. Clean stopping point before 6b.
+**Phase:** 6 / 8 (sub-phase 6a done; 6b next)
+**Last commit:** `3835212` — Phase 6a: reminder CRUD + status engine
 
 ## Where we are
 
-Phase 4 (Maintenance + Repairs) is fully shipped — all five sub-phases
-(4a, 4b, 4c, 4d, 4e) are committed and tested on iPhone. The vehicle
-dashboard now has live tiles for Baseline, Fuel, Service, Warranties,
-Issues & DTCs, and Tires.
+Phase 5 (Tires) is fully shipped — all three sub-phases (5a, 5b, 5c)
+are committed and tested on iPhone. The Tires Current-set card now
+surfaces last pressure check + tread depth + replacement projection.
 
-Phase 5 (Tires) is broken into three sub-phases. The agreed order:
-5a → 5b → 5c. **5a is complete and shipped** — the user can install,
-edit, mark-removed, and delete tire sets, with auto-close of the
-previous active set on a fresh install.
+Phase 6 (Reminders) is broken into three sub-phases. Agreed order:
+6a → 6b → 6c. **6a is complete and shipped** — the user can create,
+edit, pause, and delete reminders. The status engine computes
+overdue / due-soon / ok / no_data with miles- and days-remaining.
+The dashboard "Reminders" tile is reachable (basic, no badge yet).
 
-## Resume action: start Phase 5b (Per-corner pressure log)
+## Resume action: start Phase 6b (ServiceEntry → Reminder auto-advance)
 
-The `TirePressureLog` model already exists in `prisma/schema.prisma`:
+The status engine already does on-read merging — `resolveLastDone()`
+in `src/lib/reminders.ts` walks matching ServiceEntry rows and
+advances lastDone forward. So display is already correct.
 
-```prisma
-model TirePressureLog {
-  id         String   @id @default(cuid())
-  vehicleId  String
-  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  tireSetId  String?
-  tireSet    TireSet? @relation(fields: [tireSetId], references: [id])
-  recordedAt DateTime
-  ambientF   Float?
+What 6b adds: persistent advancement on the Reminder row itself when
+a ServiceEntry is saved. Why bother if the on-read merge already
+works?
 
-  // Before-fill PSI per corner
-  flBefore Float?
-  frBefore Float?
-  rlBefore Float?
-  rrBefore Float?
+1. **Performance / simplicity** — the on-read merge requires the
+   reminders page to fetch every ServiceEntry for the vehicle and
+   group by serviceType. Persisting lastDoneMiles/lastDoneAt removes
+   that join in the common case.
+2. **User trust** — when the user edits a reminder, they see
+   lastDoneMiles already filled in, which feels right.
+3. **Foundation for 6c notifications** — a stored "last done" lets
+   us check "due since last seen" without doing a full join.
 
-  // After-fill PSI per corner (null if it was a check-only event)
-  flAfter Float?
-  frAfter Float?
-  rlAfter Float?
-  rrAfter Float?
+### Concrete plan for 6b
 
-  notes String?
+1. **Helper function** `advanceMatchingReminders` in a new
+   `src/lib/reminder-advance.ts` (or inline in service.ts — TBD;
+   probably its own file so it's testable).
+   ```ts
+   async function advanceMatchingReminders(
+     vehicleId: string,
+     serviceType: string,
+     odometer: number,
+     performedAt: Date
+   ): Promise<void> {
+     await prisma.reminder.updateMany({
+       where: {
+         vehicleId,
+         serviceType,
+         isActive: true,
+         // Only advance forward — never backwards. Doing this in a
+         // single SQL statement avoids a read-then-write race.
+         OR: [
+           { lastDoneMiles: null },
+           { lastDoneMiles: { lt: odometer } },
+         ],
+       },
+       data: { lastDoneMiles: odometer },
+     });
+     await prisma.reminder.updateMany({
+       where: {
+         vehicleId,
+         serviceType,
+         isActive: true,
+         OR: [
+           { lastDoneAt: null },
+           { lastDoneAt: { lt: performedAt } },
+         ],
+       },
+       data: { lastDoneAt: performedAt },
+     });
+   }
+   ```
+   Two updateMany calls because each dimension has its own
+   forward-only filter; trying to do both in one statement requires
+   a CASE that prisma's updateMany can't express.
 
-  @@index([vehicleId, recordedAt])
-}
+2. **Hook into `src/app/actions/service.ts`**:
+   - `createServiceEntry` — call `advanceMatchingReminders` after
+     the ServiceEntry create succeeds, before revalidatePath.
+   - `updateServiceEntry` — same. Edge case: if the user edits the
+     entry to a *different* serviceType, we'd ideally roll back the
+     old reminder advance. **Decision: don't.** Rolling back requires
+     a full history scan to find what the new effective lastDone
+     should be, and is rare. Document this as a known behavior; the
+     user can edit the reminder by hand if needed.
+   - `deleteServiceEntry` — same: don't roll back. Rare and complex.
+
+3. **Skip "custom" serviceType** — every custom entry is unique by
+   definition, so no reminder will ever match. The helper short-
+   circuits when serviceType === "custom".
+
+4. **Test on iPhone**:
+   - Create a "Oil change" reminder with no lastDone.
+   - List shows "No last-done data yet" status (no_data).
+   - Add a service entry, type=oil_change, mileage=42000, performedAt=today.
+   - Reminders page now shows that reminder with miles/days remaining
+     based on (42000, today).
+   - Edit that service entry, bump mileage to 42500 → reminder
+     advances to 42500.
+   - Edit it back to 41000 (lower) → reminder does NOT regress.
+
+5. **Build + typecheck clean** before commit.
+
+## Files relevant to 6b work
+
 ```
-
-`tireSetId` is nullable on purpose — the user might log pressures
-without remembering to associate to a set, or before they've added a
-set. We default to the active set when present.
-
-### Concrete plan for 5b
-
-Mirror the established pattern (Phase 4a/4c, Phase 5a):
-
-1. **`pressureLogSchema`** in `src/lib/validators.ts`
-   - Required: recordedAt, vehicleId-bound, at least one PSI value
-   - Optional: tireSetId, ambientF, all 8 PSI fields independently
-   - Validation: superRefine to require at least one Before PSI value
-     (otherwise the row carries no information)
-
-2. **`src/app/actions/tire-pressures.ts`** (new file)
-   - `createPressureLog(vehicleId, formData)` — auto-bind to active
-     tireSet if user didn't pick one; preserve null tireSetId only when
-     there is no active set
-   - `updatePressureLog(vehicleId, logId, formData)`
-   - `deletePressureLog(vehicleId, logId)`
-
-3. **`src/components/pressure-log-form.tsx`** — client component
-   - 4-corner grid (FL, FR / RL, RR) — before column always visible
-   - "After fill" toggle: when off, hide After column entirely (it's a
-     check-only event)
-   - Ambient temperature field (°F)
-   - Hidden tireSetId picked from the active set, exposed as Select if
-     the user wants to attach to a different set (e.g. snows in winter)
-   - Hydration-safe: same `seededRecordedAt` pattern as fuel/service/
-     issue forms (no `new Date()` at render)
-
-4. **Pages**
-   - `/vehicles/[id]/tires/pressures` — list. Most-recent log up top
-     showing all 4 corners with delta (before → after), older logs
-     below in compact rows
-   - `/vehicles/[id]/tires/pressures/new`
-   - `/vehicles/[id]/tires/pressures/[logId]/edit`
-
-5. **Surface on Tires Current-set card**
-   - "Last checked: 3 days ago · F 32/32 · R 30/30" or similar
-   - Links to `/tires/pressures`
-
-6. **Build + typecheck clean** before the commit
-
-## Files relevant to 5b work
-
-```
-prisma/schema.prisma                         — TirePressureLog (already there)
-src/lib/validators.ts                        — add pressureLogSchema
-src/app/actions/tire-pressures.ts            — NEW
-src/components/pressure-log-form.tsx         — NEW
-src/app/vehicles/[id]/tires/pressures/page.tsx                       — NEW
-src/app/vehicles/[id]/tires/pressures/new/page.tsx                   — NEW
-src/app/vehicles/[id]/tires/pressures/[logId]/edit/page.tsx          — NEW
-src/app/vehicles/[id]/tires/page.tsx         — surface latest log on Current card
+src/lib/reminder-advance.ts        — NEW (the helper)
+src/app/actions/service.ts         — call helper from create + update
+src/lib/reminders.ts               — already exists; no change
+prisma/schema.prisma               — no change (Reminder model already
+                                     has lastDoneMiles + lastDoneAt)
 ```
 
 ## To restart dev
@@ -115,41 +126,58 @@ npm run dev
 ```
 
 Open `http://localhost:3000` (laptop) or `http://192.168.0.16:3000`
-(iPhone). LAN IP is allow-listed in `next.config.ts` already.
+(iPhone). LAN IP is allow-listed in `next.config.ts`.
 
 ## Things to remember when resuming
 
 - **Hydration safety**: never call `new Date()` at component-render
-  time. Use a server-stable seed; set "now" in a post-mount handler if
-  you need it.
-- **Form encType**: don't set `encType` on a `<form>` whose action is a
-  server-action function — React handles it. Setting it triggers a
+  time. Use a server-stable seed; set "now" in a post-mount handler
+  if you need it.
+- **Form encType**: don't set `encType` on a `<form>` whose action is
+  a server-action function — React handles it. Setting it triggers a
   console warning on iPhone.
-- **iPhone form quirks** (file inputs only — irrelevant for 5b):
-  `capture="environment"` inputs must live OUTSIDE the `<form>` and
-  link via `<label htmlFor>`.
+- **isActive checkbox quirk**: hidden "off" must come BEFORE the
+  checkbox so the checkbox value (when present) wins. The
+  `formDataToObject` helper in `src/lib/validators.ts` keeps the
+  LAST value for a given name.
+- **Cross-vehicle defense**: every per-row server action confirms the
+  row belongs to the requesting vehicle before write. Match this
+  pattern in 6b helpers if any are added.
+- **Forward-only advancement**: a reminder's lastDone* fields should
+  never regress. Service-entry edits that lower the value should be
+  ignored.
 - **Dev server LAN access**: `next.config.ts` has
   `allowedDevOrigins: ["192.168.0.16"]`.
-- **Existing Tire UX**: a vehicle has at most one active TireSet most
-  of the time, but the schema allows multiple (e.g. seasonal swap).
-  The pressure-log default-tireSetId logic should pick the
-  most-recently-installed active set. The user can override.
 
-## Sub-phase queue after 5b
+## Sub-phase queue after 6b
 
-- **5c** — Tread depth log with replacement projection (linear
-  regression of min-corner tread vs mileage → estimated miles to 2/32)
+- **6c** — Dashboard surface (Reminders tile with count badge +
+  warning color, mirroring Warranties pattern) and a "Add common
+  reminders" seed button (oil 5k/6mo, rotation 5k, filters
+  15k/24mo, brake fluid 24mo, state inspection 12mo, wipers 12mo,
+  skipping serviceTypes already present).
+
+## After Phase 6: 7 (analytics) + 8 (polish)
+
+- Phase 7: cost-per-mile, MPG trends, year-over-year, total cost of
+  ownership.
+- Phase 8: PWA install (manifest + icons), CSV export, receipt
+  photo gallery.
 
 ## Deploy state
 
 Still local-only. Not pushed to GitHub yet (will be after this pause).
 NAS Portainer stack not deployed. Cloudflare Tunnel + Access not
-configured. All deploy infra written and ready (Dockerfile, GH Actions,
-docker-compose.yml, docs).
+configured. All deploy infra written and ready (Dockerfile, GH
+Actions, docker-compose.yml, docs).
 
 ## Recent commit history
 
 ```
+3835212 Phase 6a: reminder CRUD + status engine
+bf8642f Phase 5c: tread depth log + replacement projection
+8b7e537 Phase 5b: per-corner pressure log
+1f43d49 pause: Phase 5a done, resuming at Phase 5b (pressure log)
 4418b60 Phase 5a: TireSet CRUD + dashboard tile
 5cfc50a Phase 4e: warranty tracking dashboard
 f2288b4 Phase 4d: component history view

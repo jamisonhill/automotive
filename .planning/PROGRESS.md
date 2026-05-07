@@ -252,6 +252,8 @@ Sub-phased: 6a → 6b → 6c.
 - [x] Build + typecheck clean
 - [x] Verified end-to-end on iPhone
 
+Commit: `3835212` — Phase 6a: reminder CRUD + status engine
+
 ### 6b: ServiceEntry auto-advance [PENDING — RESUME HERE]
 - [ ] When a ServiceEntry is created/updated, advance any active
       reminder whose `serviceType` matches the entry's serviceType.
