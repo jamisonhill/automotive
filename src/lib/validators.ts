@@ -440,6 +440,61 @@ export const treadDepthLogSchema = z.object({
 
 export type TreadDepthLogInput = z.infer<typeof treadDepthLogSchema>;
 
+// =============================================================================
+// Reminder (interval-based service due tracker)
+// =============================================================================
+export const reminderSchema = z
+  .object({
+    // Required: a human-readable label that shows up in the dashboard.
+    // We don't auto-derive this from serviceType because the user might
+    // want a more specific phrasing (e.g. "Front brakes" instead of
+    // the generic "Brake pads").
+    label: z.string().min(1, "Label is required"),
+
+    // Optional link to a serviceType id. When set, ServiceEntry writes
+    // with the same serviceType auto-advance lastDoneMiles/lastDoneAt
+    // (handled in the service action, Phase 6b).
+    serviceType: optStr,
+
+    // Intervals — at least one must be set (validated below). Both
+    // dimensions are independent: whichever expires first triggers.
+    intervalMiles: optNonNegInt,
+    intervalMonths: optNonNegInt,
+
+    // Manual "last done" overrides — useful for seeding a reminder when
+    // the user knows the work was done outside this app (e.g. before
+    // they started tracking). Empty = engine falls back to matching
+    // ServiceEntry rows.
+    lastDoneMiles: optNonNegInt,
+    lastDoneAt: optDate,
+
+    // isActive lets the user pause a reminder without losing history.
+    // Hidden form fields submit nothing, so we coerce missing → true:
+    // a brand-new reminder is active by default.
+    isActive: z.preprocess(
+      (v) => {
+        if (v === undefined || v === null) return true;
+        return v === "on" || v === "true" || v === true;
+      },
+      z.boolean().default(true)
+    ),
+
+    notes: optStr,
+  })
+  .superRefine((val, ctx) => {
+    // A reminder with no interval doesn't describe a schedule — it's
+    // just a label sitting in the database with no due-date math.
+    if (val.intervalMiles == null && val.intervalMonths == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Set at least one interval (miles or months).",
+        path: ["intervalMiles"],
+      });
+    }
+  });
+
+export type ReminderInput = z.infer<typeof reminderSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };

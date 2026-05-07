@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   AlertTriangle,
+  Bell,
   Car,
   ChevronRight,
   Disc,
@@ -183,10 +184,10 @@ export default async function VehicleDetailPage({
           badge={openIssues > 0 ? openIssues : undefined}
         />
         <SectionTile
-          icon={<Gauge className="h-5 w-5 text-fg-muted" />}
+          href={`/vehicles/${vehicle.id}/reminders`}
+          icon={<Bell className="h-5 w-5 text-accent" />}
           title="Reminders"
-          description="Coming in Phase 6"
-          disabled
+          description="Track interval-based service due dates"
         />
       </div>
     </main>
