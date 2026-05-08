@@ -159,3 +159,109 @@ export function summarizeAnalytics(input: {
     costPerYear,
   };
 }
+
+// -----------------------------------------------------------------------------
+// Year-over-year breakdown (Phase 7b)
+// -----------------------------------------------------------------------------
+
+export interface YearTotals {
+  /** Calendar year, e.g., 2026. */
+  year: number;
+  fuelTotal: number;
+  serviceTotal: number;
+  tireTotal: number;
+  /** fuelTotal + serviceTotal + tireTotal. */
+  operatingTotal: number;
+  /** Miles driven in this year (max - min odometer reading inside the year),
+   *  null when fewer than two readings landed in the year. */
+  milesDriven: number | null;
+  /** operatingTotal ÷ milesDriven; null when miles unknown or zero. */
+  costPerMile: number | null;
+}
+
+/**
+ * Group every row by calendar year of its event date and emit one row
+ * per year that has any activity. Years without activity are omitted
+ * (we don't pad gaps — a missing year was likely a partial year of
+ * ownership, not a year of zero spend).
+ *
+ * Tire-set cost is attributed to the year the set was installed; this
+ * is a simplification (a $400 set on Dec 30 is allocated entirely to
+ * that year even though it'll wear into the next). For monthly trend
+ * accuracy we'd need miles-on-set math; for YoY this is good enough.
+ */
+export function summarizeYearOverYear(input: {
+  fuelEntries: { totalCost: number | null; filledAt: Date }[];
+  serviceEntries: {
+    totalCost: number | null;
+    partsCost: number | null;
+    laborCost: number | null;
+    performedAt: Date;
+  }[];
+  tireSets: { cost: number | null; installedAt: Date }[];
+  odometerReadings: { miles: number; recordedAt: Date }[];
+}): YearTotals[] {
+  // Year -> running totals. Map keys preserve insertion order, but we
+  // sort at the end so ordering doesn't depend on which source wrote
+  // first.
+  const byYear = new Map<
+    number,
+    { fuel: number; service: number; tires: number }
+  >();
+  const ensure = (y: number) => {
+    let row = byYear.get(y);
+    if (!row) {
+      row = { fuel: 0, service: 0, tires: 0 };
+      byYear.set(y, row);
+    }
+    return row;
+  };
+
+  for (const e of input.fuelEntries) {
+    ensure(e.filledAt.getFullYear()).fuel += e.totalCost ?? 0;
+  }
+  for (const e of input.serviceEntries) {
+    const cost = e.totalCost ?? (e.partsCost ?? 0) + (e.laborCost ?? 0);
+    ensure(e.performedAt.getFullYear()).service += cost;
+  }
+  for (const t of input.tireSets) {
+    ensure(t.installedAt.getFullYear()).tires += t.cost ?? 0;
+  }
+
+  // Group odometer readings by year so we can compute miles-driven-in-year.
+  const readingsByYear = new Map<number, number[]>();
+  for (const r of input.odometerReadings) {
+    const y = r.recordedAt.getFullYear();
+    const list = readingsByYear.get(y) ?? [];
+    list.push(r.miles);
+    readingsByYear.set(y, list);
+  }
+
+  const result: YearTotals[] = [];
+  for (const [year, totals] of byYear.entries()) {
+    const operatingTotal = totals.fuel + totals.service + totals.tires;
+    const readings = readingsByYear.get(year) ?? [];
+    const milesDriven =
+      readings.length >= 2
+        ? Math.max(...readings) - Math.min(...readings)
+        : null;
+    const costPerMile =
+      milesDriven != null && milesDriven > 0
+        ? operatingTotal / milesDriven
+        : null;
+    result.push({
+      year,
+      fuelTotal: totals.fuel,
+      serviceTotal: totals.service,
+      tireTotal: totals.tires,
+      operatingTotal,
+      milesDriven,
+      costPerMile,
+    });
+  }
+
+  // Most recent year first — matches the "headline up top" reading order
+  // used elsewhere in the app.
+  result.sort((a, b) => b.year - a.year);
+  return result;
+}

@@ -1,9 +1,14 @@
 import { TrendingUp } from "lucide-react";
 import { notFound } from "next/navigation";
 
+import { Sparkline } from "@/components/sparkline";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { summarizeAnalytics } from "@/lib/analytics";
+import {
+  summarizeAnalytics,
+  summarizeYearOverYear,
+  type YearTotals,
+} from "@/lib/analytics";
 import { prisma } from "@/lib/db";
 
 /*
@@ -43,19 +48,30 @@ export default async function AnalyticsPage({
       }),
       prisma.fuelEntry.findMany({
         where: { vehicleId: id },
-        select: { totalCost: true },
+        select: {
+          totalCost: true,
+          filledAt: true,
+          tripMpg: true,
+          tripMiles: true,
+        },
+        orderBy: { filledAt: "asc" },
       }),
       prisma.serviceEntry.findMany({
         where: { vehicleId: id },
-        select: { totalCost: true, partsCost: true, laborCost: true },
+        select: {
+          totalCost: true,
+          partsCost: true,
+          laborCost: true,
+          performedAt: true,
+        },
       }),
       prisma.tireSet.findMany({
         where: { vehicleId: id },
-        select: { cost: true },
+        select: { cost: true, installedAt: true },
       }),
       prisma.odometerReading.findMany({
         where: { vehicleId: id },
-        select: { miles: true },
+        select: { miles: true, recordedAt: true },
       }),
     ]);
   if (!vehicle) notFound();
@@ -67,6 +83,23 @@ export default async function AnalyticsPage({
     tireSets,
     odometerReadings,
   });
+
+  const yearly = summarizeYearOverYear({
+    fuelEntries,
+    serviceEntries,
+    tireSets,
+    odometerReadings,
+  });
+
+  // MPG sparkline data — only valid full fills contribute (tripMpg null
+  // for partials and the first fill ever). Use filledAt epoch as x so
+  // the line spaces points by real elapsed time, not entry index.
+  const mpgPoints = fuelEntries
+    .filter(
+      (e): e is typeof e & { tripMpg: number } =>
+        e.tripMpg != null && e.tripMiles != null && e.tripMiles > 0
+    )
+    .map((e) => ({ x: e.filledAt.getTime(), y: e.tripMpg }));
 
   const noData =
     totals.lifetimeMiles == null && totals.operatingTotal === 0;
@@ -118,6 +151,47 @@ export default async function AnalyticsPage({
               />
             </div>
           </Card>
+
+          {/* MPG trend sparkline — only render when there's at least
+              one valid full-fill data point to plot. */}
+          {mpgPoints.length > 0 && (
+            <Card>
+              <div className="flex items-baseline justify-between">
+                <CardTitle className="text-base">MPG trend</CardTitle>
+                <span className="text-xs text-fg-muted">
+                  {mpgPoints.length} fill
+                  {mpgPoints.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <CardDescription>
+                Per-fill MPG over time. Partial fills excluded.
+              </CardDescription>
+              <div className="mt-3">
+                <Sparkline data={mpgPoints} height={80} />
+              </div>
+              <div className="mt-1 flex justify-between text-[11px] text-fg-muted">
+                <span>
+                  {new Date(mpgPoints[0].x).toLocaleDateString(undefined, {
+                    month: "short",
+                    year: "2-digit",
+                  })}
+                </span>
+                <span>
+                  {totals.costPerMileFuel != null && (
+                    <>lifetime ${totals.costPerMileFuel.toFixed(3)}/mi</>
+                  )}
+                </span>
+                <span>
+                  {new Date(
+                    mpgPoints[mpgPoints.length - 1].x
+                  ).toLocaleDateString(undefined, {
+                    month: "short",
+                    year: "2-digit",
+                  })}
+                </span>
+              </div>
+            </Card>
+          )}
 
           {/* Operating spend breakdown */}
           <Card>
@@ -185,13 +259,75 @@ export default async function AnalyticsPage({
             </Card>
           )}
 
-          {/* Phase 7a hint that more is coming */}
-          <p className="px-1 text-center text-[11px] text-fg-muted">
-            Trends and charts coming in Phase 7b.
-          </p>
+          {/* Year-over-year breakdown — collapses years with any spend
+              into a compact table. Skips render when there's only one
+              year on file (the YoY framing doesn't add anything). */}
+          {yearly.length > 1 && (
+            <Card>
+              <CardTitle className="text-base mb-1">Year over year</CardTitle>
+              <CardDescription>
+                Spend totals per calendar year, newest first.
+              </CardDescription>
+              <div className="mt-3">
+                <YearOverYearTable rows={yearly} />
+              </div>
+            </Card>
+          )}
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Compact horizontally-scrolling-free table. We intentionally drop the
+ * tires column when no year had any tire spend so the row stays
+ * readable on a phone — the breakdown card above already covers the
+ * lifetime tire total.
+ */
+function YearOverYearTable({ rows }: { rows: YearTotals[] }) {
+  const showTires = rows.some((r) => r.tireTotal > 0);
+
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-[10px] uppercase tracking-wider text-fg-muted">
+          <th className="py-1 pr-2">Year</th>
+          <th className="py-1 px-2 text-right">Fuel</th>
+          <th className="py-1 px-2 text-right">Service</th>
+          {showTires && <th className="py-1 px-2 text-right">Tires</th>}
+          <th className="py-1 pl-2 text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border-subtle">
+        {rows.map((r) => (
+          <tr key={r.year}>
+            <td className="py-2 pr-2 font-semibold text-fg-primary">
+              {r.year}
+            </td>
+            <td className="py-2 px-2 text-right tabular-nums text-fg-secondary">
+              {r.fuelTotal > 0 ? `$${fmtNum(r.fuelTotal, 0)}` : "—"}
+            </td>
+            <td className="py-2 px-2 text-right tabular-nums text-fg-secondary">
+              {r.serviceTotal > 0 ? `$${fmtNum(r.serviceTotal, 0)}` : "—"}
+            </td>
+            {showTires && (
+              <td className="py-2 px-2 text-right tabular-nums text-fg-secondary">
+                {r.tireTotal > 0 ? `$${fmtNum(r.tireTotal, 0)}` : "—"}
+              </td>
+            )}
+            <td className="py-2 pl-2 text-right tabular-nums font-semibold text-fg-primary">
+              ${fmtNum(r.operatingTotal, 0)}
+              {r.costPerMile != null && (
+                <span className="block text-[10px] font-normal text-fg-muted">
+                  ${r.costPerMile.toFixed(3)}/mi
+                </span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
