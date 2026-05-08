@@ -1,14 +1,19 @@
 # =============================================================================
 # Portainer stack for Automotive — production deployment on home NAS.
 # =============================================================================
-# Three services share an internal network:
-#   - automotive: the Next.js app pulled from ghcr.io
-#   - cloudflared: Cloudflare Tunnel daemon, exposes the app to cars.duski.org
-#   - watchtower: polls ghcr.io and rolls forward when a new image is published
+# Two stages, controlled by Compose profiles:
 #
-# Only `cloudflared` makes outbound connections to Cloudflare; nothing is
-# exposed on the host network. The app talks to the tunnel over the docker
-# network as `automotive:3000`.
+#   1. Default (no profile)   — `automotive` + `watchtower` only.
+#      App is reachable on the LAN at http://<nas-ip>:3022.
+#      Auth disabled by default. Use this for the initial deploy.
+#
+#   2. Profile `tunnel`       — adds `cloudflared` and assumes you've set
+#      DISABLE_AUTH=false plus the CF_ACCESS_* env vars + TUNNEL_TOKEN.
+#      Public hostname (garage.duski.org) routes through Cloudflare
+#      Access → Tunnel → automotive:3000 over the docker network.
+#
+# To activate the tunnel later in Portainer, edit the stack and add
+# `tunnel` to "Profiles" before redeploying.
 # =============================================================================
 
 services:
@@ -16,22 +21,30 @@ services:
     image: ghcr.io/jamisonhill/automotive:latest
     container_name: automotive
     restart: unless-stopped
+    ports:
+      # Host:container. 3022 follows the home-NAS port convention
+      # (3010 plantlady, 3020 plantlady2, 3021 fishtank, 3022 us).
+      # Safe to leave exposed even after the tunnel goes live — the
+      # tunnel can target this same port or hit the container by name.
+      - "3022:3000"
     environment:
       DATABASE_URL: "file:/data/prod.db"
-      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN}
-      CF_ACCESS_AUD: ${CF_ACCESS_AUD}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      NEXT_PUBLIC_APP_URL: "https://cars.duski.org"
-      DISABLE_AUTH: "false"
+      # ${VAR:-default} — Compose substitutes the default when the env
+      # var isn't set in the Portainer stack. So missing CF vars don't
+      # fail the stack; they're only needed once auth is turned on.
+      DISABLE_AUTH: "${DISABLE_AUTH:-true}"
+      CF_ACCESS_TEAM_DOMAIN: "${CF_ACCESS_TEAM_DOMAIN:-}"
+      CF_ACCESS_AUD: "${CF_ACCESS_AUD:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://192.168.0.9:3022}"
       NODE_ENV: "production"
     volumes:
-      # Persist SQLite DB and uploaded receipts/photos on the NAS filesystem.
-      # Adjust the host path to wherever you want the data directory on your NAS.
+      # SQLite DB and uploaded receipts/photos live here. Pre-create
+      # /volume1/docker/automotive/data on the NAS and chown to 1001.
       - /volume1/docker/automotive/data:/data
     networks:
       - tunnel
     labels:
-      # Tell Watchtower to monitor this container.
       com.centurylinklabs.watchtower.enable: "true"
 
   cloudflared:
@@ -40,10 +53,11 @@ services:
     # already running on the home NAS (one per stack).
     container_name: cloudflared-automotive
     restart: unless-stopped
+    profiles: ["tunnel"]
     # The token from Cloudflare Zero Trust → Networks → Tunnels → <your tunnel>.
     # Set TUNNEL_TOKEN as a stack environment variable in Portainer (do NOT
     # commit the actual token to git).
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
     networks:
       - tunnel
     depends_on:
@@ -63,8 +77,6 @@ services:
       WATCHTOWER_POLL_INTERVAL: "300"
       # Clean up old images so the NAS doesn't fill with stale layers.
       WATCHTOWER_CLEANUP: "true"
-      # If you want a heads-up when an update happens, set notification env
-      # vars per https://containrrr.dev/watchtower/notifications/.
     volumes:
       # Watchtower needs the docker socket to manage containers.
       - /var/run/docker.sock:/var/run/docker.sock
