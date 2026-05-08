@@ -290,9 +290,41 @@ Commit: `360ed08` — Phase 6b: ServiceEntry → Reminder auto-advance + date-on
 
 Commit: `02c3455` — Phase 6c: dashboard reminders tile + common-reminders seed
 
-## Phase 7: Analytics [PENDING]
-- [ ] Cost-per-mile, MPG trends, year-over-year
-- [ ] Total cost of ownership
+## Phase 7: Analytics [DONE]
+
+Sub-phased: 7a → 7b.
+
+### 7a: Lifetime numbers + TCO [DONE]
+- [x] `src/lib/analytics.ts` — computeLifetimeMiles + summarizeAnalytics.
+      Single denominator (lifetime miles) so per-category $/mi sums to
+      the headline. Lifetime miles = max(odometer) - min(odometer),
+      preferring purchaseMileage as the floor when set.
+- [x] `/vehicles/[id]/analytics` — server component with hero stats
+      (lifetime miles + total $/mi), operating cost table (fuel /
+      service / tires + total with per-mile column), and TCO card
+      (rendered only when purchasePrice is recorded; includes
+      years-owned + $/year footer).
+- [x] Vehicle dashboard gains an Analytics tile (TrendingUp icon).
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
+
+Commit: `ddc5abc` — Phase 7a: per-vehicle analytics — lifetime numbers + TCO
+
+### 7b: Trends — MPG sparkline + YoY [DONE]
+- [x] `summarizeYearOverYear` groups fuel/service/tire spend by
+      calendar year, computes per-year miles driven from odometer
+      span when ≥ 2 readings landed in the year, emits per-year $/mi.
+      Sorts newest-first; years with no activity are omitted.
+- [x] MPG trend Sparkline on the analytics page — only valid full
+      fills contribute, x-axis is filledAt epoch so points space by
+      real elapsed time. Footer shows date range + lifetime $/mi fuel.
+- [x] Year-over-year table — mobile-optimized: drops the Tires column
+      when no year had tire spend, $/mi as a small sub-line under
+      each year's total. Hidden when only one year of activity exists.
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
+
+Commit: `6c112e6` — Phase 7b: analytics trends — MPG sparkline + year-over-year table
 
 ## Phase 8: Polish [PENDING]
 - [ ] PWA install (manifest, icons)
