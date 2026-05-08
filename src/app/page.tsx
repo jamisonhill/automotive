@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { listActiveVehicles } from "@/lib/queries";
 
+// Per-user data; never static. Without this, `next build` tries to
+// prerender the page in environments without a DATABASE_URL (Docker
+// build container, CI), which fails when Prisma initializes.
+export const dynamic = "force-dynamic";
+
 /*
  * Garage — the home page and main entry point.
  * Shows every active vehicle as a tappable card. "Add vehicle" CTA below.
