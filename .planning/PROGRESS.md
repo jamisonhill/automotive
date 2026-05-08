@@ -326,10 +326,62 @@ Commit: `ddc5abc` — Phase 7a: per-vehicle analytics — lifetime numbers + TCO
 
 Commit: `6c112e6` — Phase 7b: analytics trends — MPG sparkline + year-over-year table
 
-## Phase 8: Polish [PENDING]
-- [ ] PWA install (manifest, icons)
-- [ ] CSV export
-- [ ] Receipt photo gallery
+## Phase 8: Polish [DONE]
+
+Sub-phased: 8a → 8b → 8c.
+
+### 8a: PWA install (manifest + icons) [DONE]
+- [x] `scripts/generate-icons.mjs` — one-shot icon generator using
+      sharp. Renders an inline SVG (Lucide Car silhouette on accent
+      blue) into 192/512/180/maskable PNGs. Re-run only when the
+      design changes.
+- [x] `public/icons/` ships the generated PNGs (~1-3 KB each) so iOS
+      gets a proper home-screen icon and Android gets adaptive-icon
+      support.
+- [x] `src/app/manifest.ts` exposes /manifest.webmanifest via Next's
+      metadata-route convention. Standalone display, portrait, black
+      theme + background, both `any` and `maskable` icon purposes.
+- [x] `layout.tsx` wires icons.icon (favicon) + icons.apple (iOS).
+      The appleWebApp config from Phase 1 already covered status-bar.
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone (Add to Home Screen → blue car
+      icon, full-bleed launch)
+
+Commit: `7dc78eb` — Phase 8a: PWA manifest + home-screen icons
+
+### 8b: CSV export [DONE]
+- [x] `src/lib/csv.ts` — RFC 4180 builder. Quotes any cell with comma
+      / quote / newline, doubles embedded quotes, ISO 8601 for Dates,
+      true/false for booleans, blank for null/NaN, CRLF separator.
+- [x] `/api/export/{vehicleId}/{dataset}` — single GET route handler
+      dispatching across fuel, service, tires, reminders, issues,
+      odometer. Allowlist validation before any DB call. Response
+      sets text/csv + Content-Disposition with a useful filename
+      (`automotive-{slug}-{dataset}-{date}.csv`).
+- [x] `/vehicles/[id]/export` — list of datasets with row counts.
+      Each row is a plain `<a download>` to the export route so the
+      browser saves rather than navigates.
+- [x] Vehicle dashboard gains an Export data tile (Download icon).
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
+
+Commit: `a51fb51` — Phase 8b: CSV export per vehicle
+
+### 8c: Receipt photo gallery [DONE]
+- [x] `/vehicles/[id]/receipts` — 2-column grid of every service
+      entry with a receipt attached, newest first. Each card has two
+      sibling links (no nested anchors): thumbnail opens the original
+      file in a new tab via `/api/receipts/[file]`, body row jumps to
+      the entry's edit page.
+- [x] PDFs render with a FileText icon placeholder; tapping still
+      opens the file.
+- [x] Service log header gains a ghost Receipt button next to the
+      existing Add CTA so the gallery lives in the context where
+      receipts are uploaded (no new dashboard tile).
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
+
+Commit: `c2476c2` — Phase 8c: receipt photo gallery
 
 ## Deploy state
 - Local dev only so far. Not yet pushed to GitHub. NAS Portainer stack not yet
