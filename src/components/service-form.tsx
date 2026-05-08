@@ -65,13 +65,12 @@ interface ServiceFormProps {
   submitLabel: string;
 }
 
-// Format a Date for <input type="datetime-local"> (yyyy-mm-ddThh:mm, local).
-function dateTimeInputValue(d: Date | null | undefined): string {
+// Format a Date for <input type="date"> (yyyy-mm-dd, local calendar day).
+// Service entries don't need wall-clock time — only the calendar day.
+function dateInputValue(d: Date | null | undefined): string {
   if (!d) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
-    d.getDate()
-  )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export function ServiceForm({
@@ -79,11 +78,11 @@ export function ServiceForm({
   defaults,
   submitLabel,
 }: ServiceFormProps) {
-  // SSR-stable seed for performedAt — empty for new entries (the user will
-  // pick a date), persisted value for edits. We avoid `new Date()` here for
-  // the same hydration reason as the fuel form.
+  // SSR-stable seed for performedAt. The new-page passes `new Date()` so
+  // today is pre-filled; edit pages pass the saved value. Either way the
+  // value is server-rendered once, so hydration matches the client.
   const seededPerformedAt = defaults?.performedAt
-    ? dateTimeInputValue(defaults.performedAt)
+    ? dateInputValue(defaults.performedAt)
     : "";
 
   // Service type drives default category + which sections we show.
@@ -272,7 +271,7 @@ export function ServiceForm({
       <Section title="When">
         <Field label="Date" required>
           <Input
-            type="datetime-local"
+            type="date"
             name="performedAt"
             required
             defaultValue={seededPerformedAt}

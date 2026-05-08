@@ -39,7 +39,10 @@ export default async function NewServiceEntryPage({
       />
       <ServiceForm
         action={boundAction}
-        defaults={{ odometer: lastMiles }}
+        // Default the date to today. We compute it here in the server
+        // component (a single render) instead of inside the client form,
+        // so SSR HTML and client hydration see the exact same string.
+        defaults={{ odometer: lastMiles, performedAt: new Date() }}
         submitLabel="Save service"
       />
     </main>

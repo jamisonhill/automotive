@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { receiptDir } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { saveReceiptUpload } from "@/lib/receipts";
+import { advanceMatchingReminders } from "@/lib/reminder-advance";
 import { formDataToObject, serviceSchema } from "@/lib/validators";
 
 /*
@@ -117,8 +118,18 @@ export async function createServiceEntry(
     },
   });
 
+  // Phase 6b: persistently advance any matching active reminder forward.
+  // Forward-only; custom serviceTypes are skipped inside the helper.
+  await advanceMatchingReminders(
+    vehicleId,
+    parsed.serviceType,
+    parsed.odometer,
+    parsed.performedAt
+  );
+
   revalidatePath(`/vehicles/${vehicleId}`);
   revalidatePath(`/vehicles/${vehicleId}/service`);
+  revalidatePath(`/vehicles/${vehicleId}/reminders`);
   redirect(`/vehicles/${vehicleId}/service`);
 }
 
@@ -196,8 +207,22 @@ export async function updateServiceEntry(
     data: { miles: parsed.odometer, recordedAt: parsed.performedAt },
   });
 
+  // Phase 6b: advance matching reminders. Forward-only by design — if the
+  // user lowers mileage or backdates the entry, the reminder stays put.
+  // Known limitation: changing serviceType (or deleting the entry, see
+  // below) does NOT roll back a previously-advanced reminder. Reverting
+  // would require rescanning the full ServiceEntry history. Rare enough
+  // that the user can fix it by editing the reminder by hand.
+  await advanceMatchingReminders(
+    vehicleId,
+    parsed.serviceType,
+    parsed.odometer,
+    parsed.performedAt
+  );
+
   revalidatePath(`/vehicles/${vehicleId}`);
   revalidatePath(`/vehicles/${vehicleId}/service`);
+  revalidatePath(`/vehicles/${vehicleId}/reminders`);
   redirect(`/vehicles/${vehicleId}/service`);
 }
 
