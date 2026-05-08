@@ -13,8 +13,7 @@
 
 services:
   automotive:
-    # Replace <github-username> with your GitHub username/org.
-    image: ghcr.io/<github-username>/automotive:latest
+    image: ghcr.io/jamisonhill/automotive:latest
     container_name: automotive
     restart: unless-stopped
     environment:
@@ -37,7 +36,9 @@ services:
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: cloudflared
+    # Namespaced so it doesn't collide with other cloudflared containers
+    # already running on the home NAS (one per stack).
+    container_name: cloudflared-automotive
     restart: unless-stopped
     # The token from Cloudflare Zero Trust → Networks → Tunnels → <your tunnel>.
     # Set TUNNEL_TOKEN as a stack environment variable in Portainer (do NOT
@@ -50,7 +51,10 @@ services:
 
   watchtower:
     image: containrrr/watchtower:latest
-    container_name: watchtower
+    # Namespaced so it can coexist with other per-stack watchtowers on
+    # the home NAS (e.g. watchtower-devotional). Each watchtower only
+    # acts on containers it has permission to label-match.
+    container_name: watchtower-automotive
     restart: unless-stopped
     environment:
       # Only update containers we explicitly opt in via the label above.
