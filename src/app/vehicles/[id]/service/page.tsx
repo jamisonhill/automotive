@@ -1,4 +1,4 @@
-import { ChevronRight, History, Plus, Wrench } from "lucide-react";
+import { ChevronRight, History, Plus, Receipt, Wrench } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -63,11 +63,24 @@ export default async function ServicePage({
         }
         backHref={`/vehicles/${vehicle.id}`}
         actions={
-          <Link href={`/vehicles/${vehicle.id}/service/new`}>
-            <Button variant="primary" size="sm" aria-label="Add service entry">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </Link>
+          // Two sibling buttons in the header actions slot: the
+          // receipts gallery shortcut, then the primary "Add" CTA.
+          <div className="flex items-center gap-1">
+            <Link href={`/vehicles/${vehicle.id}/receipts`}>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Receipts gallery"
+              >
+                <Receipt className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link href={`/vehicles/${vehicle.id}/service/new`}>
+              <Button variant="primary" size="sm" aria-label="Add service entry">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         }
       />
 
