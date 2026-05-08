@@ -222,7 +222,7 @@ Commit: `4418b60` — Phase 5a: TireSet CRUD + dashboard tile
 - [x] Build + typecheck clean
 - [x] Verified end-to-end on iPhone (including the typo-bounds fix)
 
-## Phase 6: Reminders [IN PROGRESS]
+## Phase 6: Reminders [DONE]
 
 Sub-phased: 6a → 6b → 6c.
 
@@ -254,37 +254,41 @@ Sub-phased: 6a → 6b → 6c.
 
 Commit: `3835212` — Phase 6a: reminder CRUD + status engine
 
-### 6b: ServiceEntry auto-advance [PENDING — RESUME HERE]
-- [ ] When a ServiceEntry is created/updated, advance any active
-      reminder whose `serviceType` matches the entry's serviceType.
-      Set `lastDoneMiles` to `max(existing, entry.odometer)` and
-      `lastDoneAt` to `max(existing, entry.performedAt)` — forward
-      only, never backwards.
-- [ ] Hook into `src/app/actions/service.ts` createServiceEntry +
-      updateServiceEntry. Probably extract to a small helper:
-      `advanceMatchingReminders(vehicleId, serviceType, odometer,
-      performedAt)` so both call sites stay tidy.
-- [ ] Decision: deleting a ServiceEntry should NOT roll back any
-      reminder (would require a full history rescan and is rare).
-      Document this behavior; the user can edit the reminder
-      manually if needed.
-- [ ] Build + typecheck clean
+### 6b: ServiceEntry auto-advance [DONE]
+- [x] `src/lib/reminder-advance.ts` — advanceMatchingReminders helper
+      uses two updateMany calls with forward-only filters (one per
+      dimension). Skips serviceType "custom" since it never matches.
+- [x] `createServiceEntry` + `updateServiceEntry` call the helper
+      after the DB write and revalidate `/vehicles/[id]/reminders`.
+- [x] `deleteServiceEntry` deliberately does NOT roll back; rare and
+      would require a full history rescan. Documented in the update
+      action's comment.
+- [x] Service form switched performedAt input from `datetime-local`
+      to `date` (no time picker). New-page seeds defaults.performedAt
+      to `new Date()` from the server component so today is pre-
+      filled in a hydration-safe way.
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
 
-### 6c: Dashboard surface + common-reminders seed [PENDING]
-- [ ] Vehicle dashboard "Reminders" tile shows count badge + warning
-      color when overdue or due-soon (mirrors Warranties tile).
-- [ ] `getVehicle` includes `reminderSummary { active, dueSoon,
-      overdue }` so the dashboard doesn't need to recompute.
-- [ ] "Add common reminders" seed button on the reminders page.
-      Creates a batch of typical defaults:
-      - Oil change (5,000 mi / 6 mo, serviceType=oil_change)
-      - Tire rotation (5,000 mi, serviceType=tire_rotation)
-      - Engine air filter (15,000 mi / 24 mo)
-      - Cabin air filter (15,000 mi / 24 mo)
-      - Brake fluid flush (24 mo)
-      - State inspection (12 mo)
-      - Wiper blades (12 mo)
-      Skips any serviceType already on the vehicle.
+Commit: `360ed08` — Phase 6b: ServiceEntry → Reminder auto-advance + date-only service form
+
+### 6c: Dashboard surface + common-reminders seed [DONE]
+- [x] `getVehicle` returns `reminderSummary { active, dueSoon,
+      overdue }`. Computes live status using the same engine as the
+      reminders page so the tile and the list never disagree.
+- [x] Vehicle dashboard "Reminders" tile turns warning-orange with
+      a count badge of (overdue + dueSoon) when alertable. Mirrors
+      the Warranties tile pattern.
+- [x] `seedCommonReminders` server action seeds 7 typical defaults
+      (oil change, tire rotation, engine + cabin air filters, brake
+      fluid flush, state inspection, wiper blades). Idempotent:
+      skips serviceTypes already present so re-clicking never dupes.
+- [x] Reminders empty-state shows a secondary "Add common reminders"
+      ghost button alongside the primary "Add reminder" CTA.
+- [x] Build + typecheck clean
+- [x] Verified end-to-end on iPhone
+
+Commit: `02c3455` — Phase 6c: dashboard reminders tile + common-reminders seed
 
 ## Phase 7: Analytics [PENDING]
 - [ ] Cost-per-mile, MPG trends, year-over-year
