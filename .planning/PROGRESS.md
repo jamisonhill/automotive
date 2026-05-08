@@ -383,8 +383,79 @@ Commit: `a51fb51` — Phase 8b: CSV export per vehicle
 
 Commit: `c2476c2` — Phase 8c: receipt photo gallery
 
-## Deploy state
-- Local dev only so far. Not yet pushed to GitHub. NAS Portainer stack not yet
-  deployed. Cloudflare Tunnel + Access not yet configured.
-- All deploy infra is written and ready in the repo (Dockerfile, GH Actions,
-  docker-compose.yml, docs/cloudflare-setup.md, docs/nas-deploy.md).
+## Deploy
+
+Sub-phased: D1 (LAN-only) → D2 (full prod with Cloudflare Tunnel + Access).
+
+### D1: LAN deploy on home NAS [DONE]
+- [x] Pushed `main` to GitHub (was 11 commits ahead). GitHub Actions
+      builds and publishes `ghcr.io/jamisonhill/automotive:latest` on
+      every push. First successful image: digest `sha256:055cf1d…` at
+      commit `d2e4da0`.
+- [x] Fixed CI build failure: `/page.tsx` was being statically
+      prerendered, which crashed in the Docker build container without
+      a DATABASE_URL. Marked the route `force-dynamic`.
+- [x] docker-compose.yml prepped: pinned image to `jamisonhill`,
+      namespaced cloudflared/watchtower containers (`*-automotive`)
+      so they coexist with the existing `cloudflare` and
+      `watchtower-devotional` containers on the NAS.
+- [x] Refactored compose to LAN-deploy by default: exposed port 3022
+      on host, moved cloudflared into a `tunnel` Compose profile,
+      defaulted DISABLE_AUTH=true, made all CF + Anthropic env vars
+      optional via `${VAR:-default}` substitution.
+- [x] Made GHCR package public so Watchtower can pull without a PAT.
+- [x] Generated fine-grained PAT and created Portainer stack
+      `automotive` via Repository method (compose pulled from GitHub).
+- [x] Created `/volume1/docker/automotive/data` on the NAS, chowned to
+      uid 1001 (matches the Dockerfile `nextjs` user).
+- [x] Initialized SQLite DB inside the running container with
+      `npx prisma@6 db push --schema=/app/prisma/schema.prisma` (had
+      to pin to v6 because the runtime image has no Prisma CLI and
+      `npx prisma` fetched 7.x, which dropped `url` from schema.prisma).
+- [x] Verified LAN: `http://192.168.0.9:3022` returns 200 OK; user
+      confirmed iPhone access works.
+
+Commits:
+- `d2e4da0` — fix: mark / as dynamic so Docker build doesn't prerender Prisma calls
+- `1270c27` — deploy: pin GitHub username + namespace cloudflared/watchtower containers
+- `31643e0` — deploy: LAN-only by default, tunnel as opt-in profile
+
+### D2: Full prod (Cloudflare Tunnel + Access + OCR) [PENDING — RESUME HERE]
+- [ ] **User work — Cloudflare Tunnel** (Zero Trust dashboard):
+      Create tunnel `home-nas-automotive` (or reuse). Public hostname:
+      subdomain `garage`, domain `duski.org`, type HTTP, URL
+      `automotive:3000`. Copy the long string after `--token` →
+      `TUNNEL_TOKEN`.
+- [ ] **User work — Cloudflare Access app** (Zero Trust →
+      Applications): Self-hosted, name `Automotive`, session 1 month,
+      domain `garage.duski.org`. Policy: Allow → Include → Emails →
+      `jhill@mercyhillchurch.com`. After creation, copy the AUD tag
+      (Settings) → `CF_ACCESS_AUD`. Note team domain (top of dashboard,
+      `<team>.cloudflareaccess.com`) → `CF_ACCESS_TEAM_DOMAIN`. Confirm
+      WebAuthn login method is enabled at Settings → Authentication.
+- [ ] **User work — Anthropic key**: Create at console.anthropic.com →
+      API Keys → `ANTHROPIC_API_KEY`. Needed for fuel-pump OCR.
+- [ ] **Portainer stack env vars** (one redeploy puts everything live):
+      Set DISABLE_AUTH=false, TUNNEL_TOKEN, CF_ACCESS_TEAM_DOMAIN,
+      CF_ACCESS_AUD, ANTHROPIC_API_KEY, NEXT_PUBLIC_APP_URL=
+      `https://garage.duski.org`. Add `tunnel` to the stack's Profiles.
+      Update the stack.
+- [ ] **Verify**: Hit `https://garage.duski.org` from cellular (off
+      LAN). Cloudflare Access prompts → email PIN → register passkey →
+      app loads. Then Face-ID on subsequent visits. Log a test fuel
+      entry with a pump-screen photo to confirm OCR works (proves
+      ANTHROPIC_API_KEY is wired in).
+- [ ] **Backups**: Set up Synology Hyper Backup job covering
+      `/volume1/docker/automotive/`. `scripts/backup-prod-db.sh`
+      already exists for ad-hoc snapshots.
+
+## Deploy state (snapshot)
+- LAN deploy live on NAS Portainer (`automotive` stack). App reachable
+  at `http://192.168.0.9:3022` from the home network.
+- Auto-update loop confirmed working: `git push origin main` → GH
+  Actions builds → ghcr.io updated → Watchtower polls every 5 min and
+  rolls the container forward.
+- DB at `/volume1/docker/automotive/data/prod.db` (140 KB initial).
+- Cloudflare Tunnel + Access **not** yet configured. App is currently
+  LAN-only with auth disabled.
+- ANTHROPIC_API_KEY not set; pump-screen OCR will fail until added.

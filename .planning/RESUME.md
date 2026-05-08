@@ -1,124 +1,139 @@
 # Resume — Automotive
 
-**Paused:** 2026-05-06 (evening)
-**Reason:** Phase 6a (Reminder CRUD + status engine) committed and
-verified end-to-end on iPhone. Clean stopping point before 6b.
-**Phase:** 6 / 8 (sub-phase 6a done; 6b next)
-**Last commit:** `3835212` — Phase 6a: reminder CRUD + status engine
+**Paused:** 2026-05-08
+**Reason:** All 8 feature phases shipped + LAN deploy on home NAS is
+live and verified. Stopping before the manual Cloudflare Tunnel /
+Access / Anthropic prod-up work, which is browser-UI-clicking the
+user has to do themselves.
+**Phase:** Deploy / D2 (full prod) — D1 (LAN) is DONE
+**Last commit:** `4aed1f0` — deploy: switch domain to garage.duski.org + add ad-hoc DB backup script
 
 ## Where we are
 
-Phase 5 (Tires) is fully shipped — all three sub-phases (5a, 5b, 5c)
-are committed and tested on iPhone. The Tires Current-set card now
-surfaces last pressure check + tread depth + replacement projection.
+All eight feature phases (1–8) are complete and committed. Phase 8c
+(receipt photo gallery) was the last code work. After that we shipped
+the deployment infrastructure:
 
-Phase 6 (Reminders) is broken into three sub-phases. Agreed order:
-6a → 6b → 6c. **6a is complete and shipped** — the user can create,
-edit, pause, and delete reminders. The status engine computes
-overdue / due-soon / ok / no_data with miles- and days-remaining.
-The dashboard "Reminders" tile is reachable (basic, no badge yet).
+- GitHub Actions builds + publishes `ghcr.io/jamisonhill/automotive:latest`
+  on every push to `main`. Confirmed working as of commit `d2e4da0`
+  (the fix for the static prerender / DATABASE_URL crash).
+- Portainer stack `automotive` is live on the home NAS via Repository
+  method. App reachable on the LAN at **http://192.168.0.9:3022**.
+- SQLite DB initialized at `/volume1/docker/automotive/data/prod.db`.
+- Watchtower polls ghcr every 5 min and auto-rolls the container.
+- User confirmed the iPhone load works on the LAN.
 
-## Resume action: start Phase 6b (ServiceEntry → Reminder auto-advance)
+The compose has been refactored so cloudflared is in a `tunnel`
+profile (opt-in). DISABLE_AUTH defaults to true. All Cloudflare and
+Anthropic env vars are optional with `${VAR:-default}` substitution.
+This means the LAN stack starts cleanly without any Cloudflare config.
 
-The status engine already does on-read merging — `resolveLastDone()`
-in `src/lib/reminders.ts` walks matching ServiceEntry rows and
-advances lastDone forward. So display is already correct.
+## Resume action: D2 — full prod (Cloudflare Tunnel + Access + OCR)
 
-What 6b adds: persistent advancement on the Reminder row itself when
-a ServiceEntry is saved. Why bother if the on-read merge already
-works?
+Three browser-UI tasks the user owns, then one Portainer redeploy puts
+everything live. The Cloudflare doc is `docs/cloudflare-setup.md` —
+already updated to use `garage.duski.org`.
 
-1. **Performance / simplicity** — the on-read merge requires the
-   reminders page to fetch every ServiceEntry for the vehicle and
-   group by serviceType. Persisting lastDoneMiles/lastDoneAt removes
-   that join in the common case.
-2. **User trust** — when the user edits a reminder, they see
-   lastDoneMiles already filled in, which feels right.
-3. **Foundation for 6c notifications** — a stored "last done" lets
-   us check "due since last seen" without doing a full join.
+### 1. Cloudflare Tunnel (Zero Trust dashboard)
+- Networks → Tunnels → Create tunnel `home-nas-automotive` (or reuse
+  an existing home-NAS tunnel and add a hostname to it).
+- Copy the long string after `--token` from the install command →
+  this is `TUNNEL_TOKEN`.
+- Public Hostname page:
+  - Subdomain: `garage`
+  - Domain: `duski.org`
+  - Service Type: `HTTP`
+  - URL: `automotive:3000`  ← the docker service name + container port
+  Cloudflare auto-creates the CNAME `garage.duski.org → <tunnel>.cfargotunnel.com`.
 
-### Concrete plan for 6b
+### 2. Cloudflare Access application
+- Zero Trust → Access → Applications → Add application → Self-hosted.
+- Name: `Automotive`. Session: `1 month`.
+- Application domain: subdomain `garage`, domain `duski.org`.
+- Identity providers: leave One-time PIN enabled (used once to
+  bootstrap before passkey takes over).
+- Policy: name `Owner only`, Action `Allow`, Include → Emails →
+  `jhill@mercyhillchurch.com`.
+- After creation, open the app → Settings → Overview → copy the
+  **Application Audience (AUD) Tag** → that's `CF_ACCESS_AUD`.
+- Note the team domain (top of Zero Trust dashboard, looks like
+  `<team>.cloudflareaccess.com`) → `CF_ACCESS_TEAM_DOMAIN`.
+- Confirm WebAuthn is enabled at Settings → Authentication → Login
+  methods (so passkey / Face ID works on iPhone).
 
-1. **Helper function** `advanceMatchingReminders` in a new
-   `src/lib/reminder-advance.ts` (or inline in service.ts — TBD;
-   probably its own file so it's testable).
-   ```ts
-   async function advanceMatchingReminders(
-     vehicleId: string,
-     serviceType: string,
-     odometer: number,
-     performedAt: Date
-   ): Promise<void> {
-     await prisma.reminder.updateMany({
-       where: {
-         vehicleId,
-         serviceType,
-         isActive: true,
-         // Only advance forward — never backwards. Doing this in a
-         // single SQL statement avoids a read-then-write race.
-         OR: [
-           { lastDoneMiles: null },
-           { lastDoneMiles: { lt: odometer } },
-         ],
-       },
-       data: { lastDoneMiles: odometer },
-     });
-     await prisma.reminder.updateMany({
-       where: {
-         vehicleId,
-         serviceType,
-         isActive: true,
-         OR: [
-           { lastDoneAt: null },
-           { lastDoneAt: { lt: performedAt } },
-         ],
-       },
-       data: { lastDoneAt: performedAt },
-     });
-   }
-   ```
-   Two updateMany calls because each dimension has its own
-   forward-only filter; trying to do both in one statement requires
-   a CASE that prisma's updateMany can't express.
+### 3. Anthropic API key
+- console.anthropic.com → API Keys → Create. Optionally scope to a
+  workspace for isolated billing. Copy the `sk-ant-…` value →
+  `ANTHROPIC_API_KEY`. Used by the fuel-pump OCR feature only.
 
-2. **Hook into `src/app/actions/service.ts`**:
-   - `createServiceEntry` — call `advanceMatchingReminders` after
-     the ServiceEntry create succeeds, before revalidatePath.
-   - `updateServiceEntry` — same. Edge case: if the user edits the
-     entry to a *different* serviceType, we'd ideally roll back the
-     old reminder advance. **Decision: don't.** Rolling back requires
-     a full history scan to find what the new effective lastDone
-     should be, and is rare. Document this as a known behavior; the
-     user can edit the reminder by hand if needed.
-   - `deleteServiceEntry` — same: don't roll back. Rare and complex.
+### 4. Portainer redeploy (one update brings it all live)
+Open Portainer (http://192.168.0.9:9000) → Stacks → `automotive` →
+edit. Set these stack environment variables:
 
-3. **Skip "custom" serviceType** — every custom entry is unique by
-   definition, so no reminder will ever match. The helper short-
-   circuits when serviceType === "custom".
+| Key | Value |
+|---|---|
+| `DISABLE_AUTH` | `false` |
+| `TUNNEL_TOKEN` | (from step 1) |
+| `CF_ACCESS_TEAM_DOMAIN` | (from step 2) |
+| `CF_ACCESS_AUD` | (from step 2) |
+| `ANTHROPIC_API_KEY` | (from step 3) |
+| `NEXT_PUBLIC_APP_URL` | `https://garage.duski.org` |
 
-4. **Test on iPhone**:
-   - Create a "Oil change" reminder with no lastDone.
-   - List shows "No last-done data yet" status (no_data).
-   - Add a service entry, type=oil_change, mileage=42000, performedAt=today.
-   - Reminders page now shows that reminder with miles/days remaining
-     based on (42000, today).
-   - Edit that service entry, bump mileage to 42500 → reminder
-     advances to 42500.
-   - Edit it back to 41000 (lower) → reminder does NOT regress.
+In the stack's **Profiles** field add `tunnel`. Update the stack.
+Watchtower won't interfere — it only updates app images, not the
+stack definition. Portainer will recreate `automotive` with the new
+env and bring up `cloudflared-automotive`.
 
-5. **Build + typecheck clean** before commit.
+### 5. Verify (assistant work)
+- From cellular (off the LAN), open `https://garage.duski.org`.
+- Cloudflare Access prompt appears → enter email → 6-digit PIN from
+  email → app prompts to register a passkey → Face ID → registered.
+- Sign out, revisit, choose Passkey → Face ID → in.
+- Log a test fuel entry with a real pump-screen photo to confirm
+  OCR works (this proves ANTHROPIC_API_KEY is wired correctly).
+- Check `cloudflared-automotive` logs in Portainer for "Registered
+  tunnel connection" lines (no auth errors).
 
-## Files relevant to 6b work
+### 6. Backups
+- Synology Control Panel → Hyper Backup → new job covering
+  `/volume1/docker/automotive/`. Pick a schedule (daily is fine for
+  a personal app).
+- `scripts/backup-prod-db.sh` is already in the repo for ad-hoc
+  snapshots before risky operations.
+
+## Files relevant to D2
 
 ```
-src/lib/reminder-advance.ts        — NEW (the helper)
-src/app/actions/service.ts         — call helper from create + update
-src/lib/reminders.ts               — already exists; no change
-prisma/schema.prisma               — no change (Reminder model already
-                                     has lastDoneMiles + lastDoneAt)
+docs/cloudflare-setup.md       — full walkthrough of the Cloudflare work
+docs/nas-deploy.md             — Portainer + NAS context
+docker-compose.yml             — `tunnel` profile + ${VAR:-default} env
+scripts/backup-prod-db.sh      — ad-hoc DB snapshot
+src/proxy.ts                   — middleware that reads CF_ACCESS_* + DISABLE_AUTH
 ```
 
-## To restart dev
+## Things to remember when resuming
+
+- **NAS connection**: SSH alias `nas-home` (192.168.0.9). Sudo
+  password `Pats4ouk`. docker-compose binary is at
+  `/usr/local/bin/docker-compose`. See `/NAS-Home` skill for full
+  context.
+- **Portainer URL**: http://192.168.0.9:9000.
+- **Auto-update is on**: any push to `main` will roll the container
+  forward within ~5 minutes. So feature work doesn't require any
+  redeploy steps — just push.
+- **Prisma CLI gotcha**: the runtime image doesn't ship the Prisma
+  CLI. To run migrations / db push inside the container, use
+  `npx -y prisma@6 ...` so it pins to v6 (matches the schema).
+  Default `npx prisma` would fetch v7 which dropped `url` from
+  schema.prisma.
+- **Container naming**: ours is namespaced `cloudflared-automotive`
+  and `watchtower-automotive` to coexist with the existing
+  `cloudflare` and `watchtower-devotional` containers on the NAS.
+- **Port 3022**: stays exposed even after the tunnel is live. The
+  tunnel can target either the docker service name (`automotive:3000`)
+  or `localhost:3022` on the NAS.
+
+## To restart dev (laptop, unrelated to the prod deploy)
 
 ```bash
 cd /Users/jamisonhill/Ai/automotive
@@ -126,67 +141,23 @@ npm run dev
 ```
 
 Open `http://localhost:3000` (laptop) or `http://192.168.0.16:3000`
-(iPhone). LAN IP is allow-listed in `next.config.ts`.
-
-## Things to remember when resuming
-
-- **Hydration safety**: never call `new Date()` at component-render
-  time. Use a server-stable seed; set "now" in a post-mount handler
-  if you need it.
-- **Form encType**: don't set `encType` on a `<form>` whose action is
-  a server-action function — React handles it. Setting it triggers a
-  console warning on iPhone.
-- **isActive checkbox quirk**: hidden "off" must come BEFORE the
-  checkbox so the checkbox value (when present) wins. The
-  `formDataToObject` helper in `src/lib/validators.ts` keeps the
-  LAST value for a given name.
-- **Cross-vehicle defense**: every per-row server action confirms the
-  row belongs to the requesting vehicle before write. Match this
-  pattern in 6b helpers if any are added.
-- **Forward-only advancement**: a reminder's lastDone* fields should
-  never regress. Service-entry edits that lower the value should be
-  ignored.
-- **Dev server LAN access**: `next.config.ts` has
-  `allowedDevOrigins: ["192.168.0.16"]`.
-
-## Sub-phase queue after 6b
-
-- **6c** — Dashboard surface (Reminders tile with count badge +
-  warning color, mirroring Warranties pattern) and a "Add common
-  reminders" seed button (oil 5k/6mo, rotation 5k, filters
-  15k/24mo, brake fluid 24mo, state inspection 12mo, wipers 12mo,
-  skipping serviceTypes already present).
-
-## After Phase 6: 7 (analytics) + 8 (polish)
-
-- Phase 7: cost-per-mile, MPG trends, year-over-year, total cost of
-  ownership.
-- Phase 8: PWA install (manifest + icons), CSV export, receipt
-  photo gallery.
-
-## Deploy state
-
-Still local-only. Not pushed to GitHub yet (will be after this pause).
-NAS Portainer stack not deployed. Cloudflare Tunnel + Access not
-configured. All deploy infra written and ready (Dockerfile, GH
-Actions, docker-compose.yml, docs).
+(iPhone). LAN IP allow-listed in `next.config.ts`.
 
 ## Recent commit history
 
 ```
-3835212 Phase 6a: reminder CRUD + status engine
-bf8642f Phase 5c: tread depth log + replacement projection
-8b7e537 Phase 5b: per-corner pressure log
-1f43d49 pause: Phase 5a done, resuming at Phase 5b (pressure log)
-4418b60 Phase 5a: TireSet CRUD + dashboard tile
-5cfc50a Phase 4e: warranty tracking dashboard
-f2288b4 Phase 4d: component history view
-877a018 Phase 4b: service form polish
-b6a90f5 Phase 4c: issues / DTC log
-6f6d652 pause: Phase 4a done, resuming at Phase 4c (Issues / DTC log)
-0327078 Phase 4a: ServiceEntry CRUD + receipts
-8a07adc Phase 3: fuel + OCR verified end-to-end on iPhone
-2986675 pause: Phase 3 fuel + OCR built, awaiting iPhone OCR verification
-a1d9536 Phase 2: vehicles + used-car baseline
-1151252 Phase 1: foundation — scaffold, schema, auth, deploy pipeline
+4aed1f0 deploy: switch domain to garage.duski.org + add ad-hoc DB backup script
+31643e0 deploy: LAN-only by default, tunnel as opt-in profile
+1270c27 deploy: pin GitHub username + namespace cloudflared/watchtower containers
+d2e4da0 fix: mark / as dynamic so Docker build doesn't prerender Prisma calls
+59cf9ba docs: mark Phase 8 (Polish) DONE in PROGRESS.md — all phases complete
+c2476c2 Phase 8c: receipt photo gallery
+a51fb51 Phase 8b: CSV export per vehicle
+7dc78eb Phase 8a: PWA manifest + home-screen icons
+5caf9aa docs: mark Phase 7 (Analytics) DONE in PROGRESS.md
+6c112e6 Phase 7b: analytics trends — MPG sparkline + year-over-year table
+ddc5abc Phase 7a: per-vehicle analytics — lifetime numbers + TCO
+edc3903 docs: mark Phase 6 (Reminders) DONE in PROGRESS.md
+02c3455 Phase 6c: dashboard reminders tile + common-reminders seed
+360ed08 Phase 6b: ServiceEntry → Reminder auto-advance + date-only service form
 ```
