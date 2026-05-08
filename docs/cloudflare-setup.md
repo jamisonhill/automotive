@@ -1,9 +1,10 @@
-# Cloudflare Tunnel + Access setup for `cars.duski.org`
+# Cloudflare Tunnel + Access setup for `garage.duski.org`
+
 
 Goal: expose the app to the internet through a Cloudflare Tunnel (no open ports on the NAS), with Cloudflare Access in front so only you can reach it — and so authentication is **Face ID via passkey**, no password screen in the app itself.
 
 End state:
-- `https://cars.duski.org` → Cloudflare → Tunnel → NAS Docker container
+- `https://garage.duski.org` → Cloudflare → Tunnel → NAS Docker container
 - First visit on iPhone: enter your email, get a 6-digit code, then **register a passkey**
 - Every subsequent visit: tap the page → Face ID prompt → in
 
@@ -33,13 +34,13 @@ Easiest path on a Synology NAS: run `cloudflared` as another Docker container in
 4. Cloudflare shows you an install command. **Copy the token** — the long string after `--token`. You'll paste this into the docker-compose later.
 5. Skip the install command page (we're using Docker, not their installer) → **Next**.
 6. On the **Public Hostname** page:
-   - Subdomain: `cars`
+   - Subdomain: `garage`
    - Domain: `duski.org`
    - Service Type: `HTTP`
    - URL: `automotive:3000` (this is the Docker service name we'll use in compose)
 7. **Save tunnel**.
 
-Cloudflare automatically creates a CNAME record `cars.duski.org → <tunnel-id>.cfargotunnel.com`. No manual DNS work needed.
+Cloudflare automatically creates a CNAME record `garage.duski.org → <tunnel-id>.cfargotunnel.com`. No manual DNS work needed.
 
 ---
 
@@ -53,7 +54,7 @@ This is what gates the app behind Face ID.
    - **Application name**: `Automotive`
    - **Session duration**: `1 month` (long-lived = fewer Face ID prompts)
    - **Application domain**:
-     - Subdomain: `cars`
+     - Subdomain: `garage`
      - Domain: `duski.org`
 4. Scroll down to **Identity providers**: leave the default **One-time PIN** enabled (this sends a 6-digit code to your email — we'll use it once to bootstrap, then never again because passkeys take over).
 5. Click **Next** → **Add policy**:
@@ -95,11 +96,11 @@ The middleware (`src/middleware.ts`) verifies every request's CF Access JWT agai
 
 ## Step 6 — First login
 
-1. Open `https://cars.duski.org` on your iPhone.
+1. Open `https://garage.duski.org` on your iPhone.
 2. Cloudflare Access page appears → enter `jhill@mercyhillchurch.com` → **Send me a code**.
 3. Get the 6-digit code from email, paste it.
 4. After successful login, Cloudflare prompts: "Register a security key" → tap → iOS passkey sheet appears → **Face ID** → Done.
-5. Log out, then revisit `cars.duski.org` → choose **Passkey** → **Face ID** → in.
+5. Log out, then revisit `garage.duski.org` → choose **Passkey** → **Face ID** → in.
 6. Add the page to your Home Screen so it opens like an app.
 
 ---
@@ -107,5 +108,5 @@ The middleware (`src/middleware.ts`) verifies every request's CF Access JWT agai
 ## Troubleshooting
 
 - **401 from the app immediately after login**: the AUD or team domain is wrong. Double-check both env vars match exactly (no `https://`, no trailing slash on team domain).
-- **CF Access page never appears, app shows 401 directly**: the Tunnel is sending traffic but Access isn't applied to the hostname. Confirm in **Access → Applications** that the app's domain matches `cars.duski.org` exactly.
+- **CF Access page never appears, app shows 401 directly**: the Tunnel is sending traffic but Access isn't applied to the hostname. Confirm in **Access → Applications** that the app's domain matches `garage.duski.org` exactly.
 - **Tunnel shows "down" in dashboard**: the `cloudflared` container can't reach Cloudflare. Check it has internet egress and the tunnel token env var is set correctly.
