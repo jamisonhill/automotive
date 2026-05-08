@@ -5,6 +5,7 @@ import {
   Car,
   ChevronRight,
   Disc,
+  Download,
   Fuel,
   Pencil,
   ShieldCheck,
@@ -211,6 +212,12 @@ export default async function VehicleDetailPage({
           icon={<TrendingUp className="h-5 w-5 text-accent" />}
           title="Analytics"
           description="Cost-per-mile, lifetime spend, TCO"
+        />
+        <SectionTile
+          href={`/vehicles/${vehicle.id}/export`}
+          icon={<Download className="h-5 w-5 text-accent" />}
+          title="Export data"
+          description="CSV downloads of every dataset"
         />
       </div>
     </main>
