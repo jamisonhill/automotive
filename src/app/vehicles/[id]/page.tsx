@@ -6,9 +6,9 @@ import {
   ChevronRight,
   Disc,
   Fuel,
-  Gauge,
   Pencil,
   ShieldCheck,
+  TrendingUp,
   Wrench,
 } from "lucide-react";
 import Link from "next/link";
@@ -205,6 +205,12 @@ export default async function VehicleDetailPage({
                   : `${reminders.active} active`
           }
           badge={remindersAlertCount > 0 ? remindersAlertCount : undefined}
+        />
+        <SectionTile
+          href={`/vehicles/${vehicle.id}/analytics`}
+          icon={<TrendingUp className="h-5 w-5 text-accent" />}
+          title="Analytics"
+          description="Cost-per-mile, lifetime spend, TCO"
         />
       </div>
     </main>
