@@ -83,6 +83,101 @@ export async function updateReminder(
 }
 
 // -----------------------------------------------------------------------------
+// Seed common reminders
+// -----------------------------------------------------------------------------
+
+/*
+ * The canonical "starter set" of maintenance reminders for a typical
+ * passenger vehicle. Intervals are conservative defaults — the user can
+ * tighten or loosen any of them after seeding by editing the row.
+ *
+ * serviceType strings MUST match the catalog in src/lib/service-types.ts
+ * so that auto-advance from ServiceEntry rows works out of the box.
+ */
+const COMMON_REMINDER_DEFAULTS: {
+  label: string;
+  serviceType: string;
+  intervalMiles: number | null;
+  intervalMonths: number | null;
+}[] = [
+  {
+    label: "Oil change",
+    serviceType: "oil_change",
+    intervalMiles: 5000,
+    intervalMonths: 6,
+  },
+  {
+    label: "Tire rotation",
+    serviceType: "tire_rotation",
+    intervalMiles: 5000,
+    intervalMonths: null,
+  },
+  {
+    label: "Engine air filter",
+    serviceType: "air_filter",
+    intervalMiles: 15000,
+    intervalMonths: 24,
+  },
+  {
+    label: "Cabin air filter",
+    serviceType: "cabin_filter",
+    intervalMiles: 15000,
+    intervalMonths: 24,
+  },
+  {
+    label: "Brake fluid flush",
+    serviceType: "brake_fluid_flush",
+    intervalMiles: null,
+    intervalMonths: 24,
+  },
+  {
+    label: "State inspection",
+    serviceType: "state_inspection",
+    intervalMiles: null,
+    intervalMonths: 12,
+  },
+  {
+    label: "Wiper blades",
+    serviceType: "wiper_blades",
+    intervalMiles: null,
+    intervalMonths: 12,
+  },
+];
+
+/**
+ * Bulk-create the starter set, skipping any serviceType already present
+ * on the vehicle so repeat clicks are safe (idempotent in practice). The
+ * vehicle stays on the reminders page after the create — no redirect.
+ */
+export async function seedCommonReminders(vehicleId: string) {
+  const candidateTypes = COMMON_REMINDER_DEFAULTS.map((d) => d.serviceType);
+  const existing = await prisma.reminder.findMany({
+    where: { vehicleId, serviceType: { in: candidateTypes } },
+    select: { serviceType: true },
+  });
+  const existingSet = new Set(existing.map((r) => r.serviceType));
+
+  const toCreate = COMMON_REMINDER_DEFAULTS.filter(
+    (d) => !existingSet.has(d.serviceType)
+  );
+
+  if (toCreate.length > 0) {
+    await prisma.reminder.createMany({
+      data: toCreate.map((d) => ({
+        vehicleId,
+        label: d.label,
+        serviceType: d.serviceType,
+        intervalMiles: d.intervalMiles,
+        intervalMonths: d.intervalMonths,
+      })),
+    });
+  }
+
+  revalidatePath(`/vehicles/${vehicleId}`);
+  revalidatePath(`/vehicles/${vehicleId}/reminders`);
+}
+
+// -----------------------------------------------------------------------------
 // Delete
 // -----------------------------------------------------------------------------
 export async function deleteReminder(vehicleId: string, reminderId: string) {

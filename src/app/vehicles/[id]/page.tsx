@@ -46,6 +46,8 @@ export default async function VehicleDetailPage({
   const lastService = vehicle.serviceEntries[0] ?? null;
   const openIssues = vehicle.openIssueCount;
   const warranties = vehicle.warrantySummary;
+  const reminders = vehicle.reminderSummary;
+  const remindersAlertCount = reminders.overdue + reminders.dueSoon;
   const currentTires = vehicle.tireSets[0] ?? null;
 
   return (
@@ -185,9 +187,24 @@ export default async function VehicleDetailPage({
         />
         <SectionTile
           href={`/vehicles/${vehicle.id}/reminders`}
-          icon={<Bell className="h-5 w-5 text-accent" />}
+          icon={
+            <Bell
+              className={`h-5 w-5 ${
+                remindersAlertCount > 0 ? "text-warning" : "text-accent"
+              }`}
+            />
+          }
           title="Reminders"
-          description="Track interval-based service due dates"
+          description={
+            reminders.active === 0
+              ? "Track interval-based service due dates"
+              : reminders.overdue > 0
+                ? `${reminders.overdue} overdue · ${reminders.active} active`
+                : reminders.dueSoon > 0
+                  ? `${reminders.dueSoon} due soon · ${reminders.active} active`
+                  : `${reminders.active} active`
+          }
+          badge={remindersAlertCount > 0 ? remindersAlertCount : undefined}
         />
       </div>
     </main>

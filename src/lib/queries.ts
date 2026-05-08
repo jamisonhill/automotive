@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { computeReminderStatus } from "@/lib/reminders";
 import { computeWarrantyStatus } from "@/lib/warranties";
 
 /*
@@ -93,6 +94,45 @@ export async function getVehicle(id: string) {
     else expiredWarranties += 1;
   }
 
+  // Reminder summary — counts of active / due-soon / overdue across all
+  // active reminders. We compute live status (mirrors the reminders page)
+  // because explicit lastDone fields and matching ServiceEntry rows can
+  // both shift the bucket. Volume per vehicle is small (≤ 20 even for
+  // diligent owners), so the in-memory grouping stays cheap.
+  const reminders = await prisma.reminder.findMany({
+    where: { vehicleId: id, isActive: true },
+  });
+  let activeReminders = 0;
+  let dueSoonReminders = 0;
+  let overdueReminders = 0;
+  if (reminders.length > 0) {
+    const reminderServiceEntries = await prisma.serviceEntry.findMany({
+      where: { vehicleId: id },
+      select: { serviceType: true, performedAt: true, odometer: true },
+    });
+    // Index by serviceType so each reminder pulls its slice in O(1).
+    const byType = new Map<
+      string,
+      { performedAt: Date; odometer: number }[]
+    >();
+    for (const e of reminderServiceEntries) {
+      const list = byType.get(e.serviceType) ?? [];
+      list.push({ performedAt: e.performedAt, odometer: e.odometer });
+      byType.set(e.serviceType, list);
+    }
+    for (const r of reminders) {
+      activeReminders += 1;
+      const c = computeReminderStatus(
+        r,
+        r.serviceType ? (byType.get(r.serviceType) ?? []) : [],
+        currentMiles,
+        now
+      );
+      if (c.status === "overdue") overdueReminders += 1;
+      else if (c.status === "due_soon") dueSoonReminders += 1;
+    }
+  }
+
   return {
     ...vehicle,
     openIssueCount,
@@ -100,6 +140,11 @@ export async function getVehicle(id: string) {
       active: activeWarranties,
       expiring: expiringWarranties,
       expired: expiredWarranties,
+    },
+    reminderSummary: {
+      active: activeReminders,
+      dueSoon: dueSoonReminders,
+      overdue: overdueReminders,
     },
   };
 }

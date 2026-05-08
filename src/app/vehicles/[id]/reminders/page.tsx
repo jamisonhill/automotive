@@ -1,7 +1,8 @@
-import { Bell, ChevronRight, Plus } from "lucide-react";
+import { Bell, ChevronRight, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { seedCommonReminders } from "@/app/actions/reminders";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
@@ -128,12 +129,23 @@ export default async function RemindersPage({
         <Card className="py-10 text-center">
           <Bell className="mx-auto mb-3 h-8 w-8 text-fg-muted" />
           <p className="mb-4 text-fg-secondary">No reminders set.</p>
-          <Link href={`/vehicles/${vehicle.id}/reminders/new`}>
-            <Button>
-              <Plus className="h-4 w-4" />
-              Add reminder
-            </Button>
-          </Link>
+          <div className="flex flex-col items-center gap-2">
+            <Link href={`/vehicles/${vehicle.id}/reminders/new`}>
+              <Button>
+                <Plus className="h-4 w-4" />
+                Add reminder
+              </Button>
+            </Link>
+            {/* Seed action — bound to vehicleId so the button just submits.
+                Idempotent: the action skips serviceTypes already present,
+                so re-clicking will never duplicate rows. */}
+            <form action={seedCommonReminders.bind(null, vehicle.id)}>
+              <Button type="submit" variant="ghost" size="sm">
+                <Sparkles className="h-4 w-4" />
+                Add common reminders
+              </Button>
+            </form>
+          </div>
         </Card>
       ) : (
         <>
