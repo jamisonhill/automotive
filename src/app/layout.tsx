@@ -15,6 +15,14 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "Automotive",
   },
+  // iOS uses apple-touch-icon (180x180) for the home-screen icon.
+  // The manifest at /manifest.webmanifest covers Android/Chrome.
+  icons: {
+    // Standard browser favicon — points at the smaller PWA icon so we
+    // don't ship a separate file just for tab favicons.
+    icon: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 // Viewport tag controls how iPhone Safari sizes the page.
