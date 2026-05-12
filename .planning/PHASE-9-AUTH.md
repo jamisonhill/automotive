@@ -200,7 +200,7 @@ maintenance window.
 
 ---
 
-## 9e: Logout + minimal account UI [PENDING]
+## 9e: Logout + minimal account UI [DONE]
 
 - [ ] `/account/page.tsx` — shows email + a `signOut` button. Linked from
       the vehicle dashboard header (small user icon, top-right).

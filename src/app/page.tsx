@@ -1,4 +1,4 @@
-import { Car, Plus } from "lucide-react";
+import { Car, CircleUser, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ export default async function HomePage() {
         <div className="rounded-md bg-accent p-2">
           <Car className="h-6 w-6 text-accent-fg" />
         </div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-fg-primary">Garage</h1>
           <p className="text-sm text-fg-secondary">
             {vehicles.length === 0
@@ -35,6 +35,13 @@ export default async function HomePage() {
               : `${vehicles.length} vehicle${vehicles.length === 1 ? "" : "s"}`}
           </p>
         </div>
+        <Link
+          href="/account"
+          aria-label="Account"
+          className="rounded-full p-2 text-fg-secondary active:bg-bg-elevated"
+        >
+          <CircleUser className="h-6 w-6" />
+        </Link>
       </header>
 
       {vehicles.length === 0 ? (

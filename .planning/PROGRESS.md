@@ -400,10 +400,13 @@ in `.planning/PHASE-9-AUTH.md`.
 
 ### Remaining
 - 9d.3: flip Vehicle.userId from nullable → required (migration)
-- 9e: /account page + logout button
 - 9f: delete the dormant Cloudflare Access app from Zero Trust;
   mark `docs/cloudflare-setup.md` deprecated; update PROGRESS.md
   to DONE.
+
+### 9e [DONE]
+- /account page with email + signed-in date + Sign out button
+- CircleUser icon top-right on the Garage root page links to /account
 
 ## Deploy
 
