@@ -1,49 +1,63 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { extractAccessJwt, verifyAccessJwt } from "@/lib/cf-access";
+import { SESSION_COOKIE_NAME, verifySession } from "@/lib/session-edge";
 
 /*
  * Edge proxy — runs before every matched request.
  * (Next.js 16 renamed this convention from "middleware" to "proxy"; same idea.)
  *
- * In production, every request must carry a valid Cloudflare Access JWT.
- * If verification fails we return 401 (no redirect — Cloudflare itself
- * handles the auth UI before requests ever reach us).
+ * Phase 9c: replaced Cloudflare Access JWT verification with our own
+ * session cookie. Every request to a gated route must carry a valid
+ * `auto_session` cookie. Missing or invalid → redirect to /login.
  *
- * For local dev, set DISABLE_AUTH=true in .env.local to bypass.
+ * Public paths (no session required):
+ *   - /login, /signup (the unauthenticated screens themselves)
+ *   - Static assets and PWA manifest (handled by the matcher exclusion below)
  *
- * IMPORTANT: this runs in the edge runtime, so anything imported here must
- * be edge-compatible. `jose` is — `jsonwebtoken` would not be.
+ * IMPORTANT: this runs in the edge runtime, so the only allowed imports
+ * are edge-compatible. `jose` is. `@prisma/client` is NOT — that's why we
+ * import from `@/lib/session-edge` (jose-only) rather than `@/lib/session`.
  */
 
+// Paths that render their own unauthenticated UI. These must be reachable
+// without a session so users can sign up / log in. Anything outside this
+// list demands a valid session cookie.
+const PUBLIC_PATHS = new Set(["/login", "/signup"]);
+
 export async function proxy(req: NextRequest) {
-  // Dev-only bypass. The env var is read at runtime; setting it to "true"
-  // in .env.local lets you run `npm run dev` without CF.
-  if (process.env.DISABLE_AUTH === "true") {
+  const { pathname } = req.nextUrl;
+
+  if (PUBLIC_PATHS.has(pathname)) {
     return NextResponse.next();
   }
 
-  const token = extractAccessJwt(req);
+  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!token) {
-    return new NextResponse("Unauthorized: missing Cloudflare Access token", {
-      status: 401,
-    });
+    return redirectToLogin(req);
   }
 
-  try {
-    const verified = await verifyAccessJwt(token);
-    // Pass the verified email through to downstream handlers via a request
-    // header. Server components / API routes can read this with
-    // `headers().get("x-user-email")`.
-    const requestHeaders = new Headers(req.headers);
-    requestHeaders.set("x-user-email", verified.email);
-    return NextResponse.next({ request: { headers: requestHeaders } });
-  } catch (err) {
-    // Verification can fail for: expired token, wrong audience, bad signature,
-    // missing JWKS key, network error fetching JWKS. All are 401.
-    const message = err instanceof Error ? err.message : "verification failed";
-    return new NextResponse(`Unauthorized: ${message}`, { status: 401 });
+  const verified = await verifySession(token);
+  if (!verified) {
+    // Bad or expired cookie. Clear it so the browser stops sending it,
+    // then redirect to /login.
+    const response = redirectToLogin(req);
+    response.cookies.delete(SESSION_COOKIE_NAME);
+    return response;
   }
+
+  // Forward the userId to downstream handlers via a request header so
+  // server components don't have to re-verify the JWT. Set after
+  // verification — never trust an inbound x-user-id from a client.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-user-id", verified.userId);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
+function redirectToLogin(req: NextRequest): NextResponse {
+  const url = req.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "";
+  return NextResponse.redirect(url);
 }
 
 // Match everything except Next internals and static assets.
