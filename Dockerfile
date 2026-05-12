@@ -67,6 +67,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 
+# Ship one-off maintenance scripts (e.g. Phase 9 vehicle backfill) so they
+# can be executed inside a running container without rebuilding the image.
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+
 # /data is the persistent volume mount point — SQLite DB and uploaded photos
 # live here. Pre-create with correct ownership so Portainer's bind mount works.
 RUN mkdir -p /data/photos /data/receipts && chown -R nextjs:nodejs /data

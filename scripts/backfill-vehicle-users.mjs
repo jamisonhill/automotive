@@ -1,21 +1,13 @@
-#!/usr/bin/env -S npx tsx
+#!/usr/bin/env node
 /*
- * One-off script to assign all vehicles that have no userId to a specific
- * user. Run once on the prod DB (and on dev if you have legacy data)
- * during the Phase 9d cutover.
+ * One-off backfill: assign all vehicles with no userId to the supplied user.
+ * Plain .mjs (no tsx required) so it can run inside the runtime container.
  *
- * Usage:
- *   npx tsx scripts/backfill-vehicle-users.ts <userId>
+ * Usage (local):
+ *   node scripts/backfill-vehicle-users.mjs <userId>
  *
- * To find the userId after signing up the owner account, hit the DB:
- *   npx prisma studio
- *   (or)
- *   sqlite3 prod.db "SELECT id, email FROM User"
- *
- * What it does:
- *   - Counts vehicles with userId IS NULL.
- *   - Updates them all to point at the supplied userId.
- *   - Prints the rowcount and exits.
+ * Usage (prod, inside the container):
+ *   docker exec automotive node scripts/backfill-vehicle-users.mjs <userId>
  *
  * Idempotent: re-running once everything is backfilled is a no-op.
  *
@@ -31,7 +23,7 @@ const prisma = new PrismaClient();
 async function main() {
   const userId = process.argv[2];
   if (!userId) {
-    console.error("Usage: npx tsx scripts/backfill-vehicle-users.ts <userId>");
+    console.error("Usage: node scripts/backfill-vehicle-users.mjs <userId>");
     process.exit(1);
   }
 
