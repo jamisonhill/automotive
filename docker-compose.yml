@@ -29,15 +29,18 @@ services:
       - "3022:3000"
     environment:
       DATABASE_URL: "file:/data/prod.db"
-      # ${VAR:-default} — Compose substitutes the default when the env
-      # var isn't set in the Portainer stack. So missing CF vars don't
-      # fail the stack; they're only needed once auth is turned on.
-      DISABLE_AUTH: "${DISABLE_AUTH:-true}"
-      CF_ACCESS_TEAM_DOMAIN: "${CF_ACCESS_TEAM_DOMAIN:-}"
-      CF_ACCESS_AUD: "${CF_ACCESS_AUD:-}"
+      # Phase 9 session auth — required. Generate with
+      # `openssl rand -base64 48` and set in the Portainer stack env.
+      # If absent, every signup/login throws and renders an error page.
+      SESSION_SECRET: "${SESSION_SECRET:-}"
+      # Anthropic key powers the fuel-pump OCR. Optional; OCR
+      # silently fails-soft when missing.
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://192.168.0.9:3022}"
       NODE_ENV: "production"
+      # 9f: removed DISABLE_AUTH, CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD —
+      # the middleware no longer reads them after the swap to session
+      # cookie auth.
     volumes:
       # SQLite DB and uploaded receipts/photos live here. Pre-create
       # /volume1/docker/automotive/data on the NAS and chown to 1001.
