@@ -1,5 +1,23 @@
 # Cloudflare Tunnel + Access setup for `garage.duski.org`
 
+> **⚠️ DEPRECATED (Phase 9, 2026-05-12):** Cloudflare Access is no longer
+> used. Auth lives in the app itself now (email/password → bcrypt hash →
+> signed session cookie verified by `src/proxy.ts`). Multiple users can
+> sign up — each has a private garage.
+>
+> The **Cloudflare Tunnel** half of this guide is still accurate:
+> `garage.duski.org` continues to route Cloudflare → Tunnel → NAS
+> container. Nothing about the tunnel changed.
+>
+> The **Cloudflare Access** sections (Step 3, Step 4, Step 6) describe
+> the old auth model and should be ignored. If a Zero Trust Access
+> Application named "Automotive" exists for `garage.duski.org`, it can
+> be safely deleted — the in-app middleware does the auth gating now.
+>
+> Kept as a record of the original deploy. See `.planning/PHASE-9-AUTH.md`
+> for the current auth design.
+
+---
 
 Goal: expose the app to the internet through a Cloudflare Tunnel (no open ports on the NAS), with Cloudflare Access in front so only you can reach it — and so authentication is **Face ID via passkey**, no password screen in the app itself.
 

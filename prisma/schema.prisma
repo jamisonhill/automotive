@@ -45,10 +45,11 @@ model User {
 // -----------------------------------------------------------------------------
 model Vehicle {
   id              String   @id @default(cuid())
-  // 9d: ownership. Nullable for the migration window so existing rows
-  // can be backfilled before the column flips to required (9d.3).
-  userId          String?
-  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // 9d: ownership. Flipped to required in 9d.3 after the cutover backfill
+  // assigned all existing rows to the owner account. createVehicle always
+  // sets userId from the session now, so the constraint is safe.
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   nickname        String?  // friendly name like "Daily" or "Truck"
   year            Int
   make            String

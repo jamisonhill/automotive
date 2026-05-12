@@ -1,4 +1,4 @@
-# Phase 9 — In-app auth + multi-tenant data scoping
+# Phase 9 — In-app auth + multi-tenant data scoping [DONE]
 
 Replace Cloudflare Access (gone) with hand-rolled email/password auth inside
 the Next.js app. Scope every Vehicle (and everything that cascades from it)
@@ -209,7 +209,7 @@ maintenance window.
 
 ---
 
-## 9f: Cleanup [PENDING]
+## 9f: Cleanup [DONE]
 
 - [ ] Remove `CF_ACCESS_TEAM_DOMAIN`, `CF_ACCESS_AUD`, `DISABLE_AUTH` from
       `docker-compose.yml`. Add `SESSION_SECRET`.
