@@ -25,6 +25,20 @@ datasource db {
 }
 
 // -----------------------------------------------------------------------------
+// User — phase 9 auth. Email + bcrypt hash. One garage per user.
+// -----------------------------------------------------------------------------
+// The `vehicles Vehicle[]` backref is added in 9d when Vehicle gains userId.
+// For 9a we land just the standalone table so signup/login can work in
+// isolation without touching existing Vehicle rows.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// -----------------------------------------------------------------------------
 // Vehicle — the root entity. Everything else hangs off this.
 // -----------------------------------------------------------------------------
 model Vehicle {

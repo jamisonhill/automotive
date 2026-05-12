@@ -495,6 +495,55 @@ export const reminderSchema = z
 
 export type ReminderInput = z.infer<typeof reminderSchema>;
 
+// =============================================================================
+// Auth (phase 9)
+// =============================================================================
+// Email gets lowercased + trimmed before parsing so "  Alice@Example.com "
+// and "alice@example.com" collapse to the same canonical form. The unique
+// index on User.email is case-sensitive in SQLite, so normalization must
+// happen here (not just at the DB layer).
+const emailField = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+  z.string().email("Enter a valid email address")
+);
+
+// 8-char minimum is the bare floor. We don't enforce character classes —
+// research shows complexity rules push users toward predictable patterns
+// (Password1!) rather than longer/random passwords. Length is what matters.
+const passwordField = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(128, "Password must be 128 characters or less");
+
+export const signupSchema = z
+  .object({
+    email: emailField,
+    password: passwordField,
+    confirmPassword: z.string(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.password !== val.confirmPassword) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Passwords don't match",
+        path: ["confirmPassword"],
+      });
+    }
+  });
+
+export type SignupInput = z.infer<typeof signupSchema>;
+
+export const loginSchema = z.object({
+  email: emailField,
+  // No min-length here — the schema must accept whatever the user typed so
+  // a typo still reaches signIn, which returns the generic "invalid
+  // credentials" error. Min-length validation would leak that an account
+  // exists (rejected before the lookup vs. after).
+  password: z.string().min(1, "Password is required"),
+});
+
+export type LoginInput = z.infer<typeof loginSchema>;
+
 // Suppress unused-export warnings for helpers — they exist so future schemas
 // can grab them without redefining the same coerce-with-blank pattern.
 export { optInt, optFloat };
