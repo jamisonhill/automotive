@@ -48,7 +48,7 @@ Stop after each sub-phase, verify on the LAN deploy or laptop, commit.
 
 ---
 
-## 9a: User model + auth server actions [PENDING]
+## 9a: User model + auth server actions [DONE — `4e2f532`]
 
 Foundation. No UI yet — verified by writing a one-off script that calls the
 actions directly.
@@ -97,7 +97,7 @@ round-trips.
 
 ---
 
-## 9b: Signup + login pages [PENDING]
+## 9b: Signup + login pages [DONE — `962701a`]
 
 Concrete UI. Copy the visual shape of PlantLady's LoginForm/RegisterForm if
 you liked it, restyle to the automotive dark theme.
@@ -121,7 +121,7 @@ you liked it, restyle to the automotive dark theme.
 
 ---
 
-## 9c: Middleware swap [PENDING]
+## 9c: Middleware swap [DONE — `87bc8cd`]
 
 Cut over from CF Access to session cookie. After this, the app stops
 trusting `cf-access-jwt-assertion` and starts trusting `auto_session`.
@@ -146,7 +146,7 @@ trusting `cf-access-jwt-assertion` and starts trusting `auto_session`.
 
 ---
 
-## 9d: Multi-tenant data scoping [PENDING]
+## 9d: Multi-tenant data scoping [9d.1 + 9d.2 + 9d.4 DONE — `285f344`, prod backfill complete; 9d.3 PENDING]
 
 The big one. Every vehicle gets a `userId`, every query gets scoped, and
 existing prod data gets backfilled to the owner's account in a single

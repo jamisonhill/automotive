@@ -383,6 +383,28 @@ Commit: `a51fb51` — Phase 8b: CSV export per vehicle
 
 Commit: `c2476c2` — Phase 8c: receipt photo gallery
 
+## Phase 9: Multi-tenant auth [IN PROGRESS]
+
+Cloudflare Access ripped out and replaced with in-app email/password
+auth so friends can each have a private garage. Full sub-phase plan
+in `.planning/PHASE-9-AUTH.md`.
+
+### 9a–9d.4 [DONE]
+- 9a: User model + auth server actions + session helpers (`4e2f532`)
+- 9b: /login + /signup pages (`962701a`)
+- 9c: Middleware swap CF Access → session cookie (`87bc8cd`)
+- 9d.1 + 9d.4: nullable userId + scope every vehicle query (`285f344`)
+- 9d.2 prod backfill: complete (1 vehicle assigned to owner)
+- Partial 9f (bundled into the cutover): docker-compose.yml drops
+  DISABLE_AUTH + CF_ACCESS_*, adds SESSION_SECRET (`370734c`)
+
+### Remaining
+- 9d.3: flip Vehicle.userId from nullable → required (migration)
+- 9e: /account page + logout button
+- 9f: delete the dormant Cloudflare Access app from Zero Trust;
+  mark `docs/cloudflare-setup.md` deprecated; update PROGRESS.md
+  to DONE.
+
 ## Deploy
 
 Sub-phased: D1 (LAN-only) → D2 (full prod with Cloudflare Tunnel + Access).
