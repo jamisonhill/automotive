@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import { formDataToObject, issueSchema } from "@/lib/validators";
 
 /*
@@ -98,6 +99,7 @@ async function syncServiceEntryLink(
 // Create
 // -----------------------------------------------------------------------------
 export async function createIssue(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = issueSchema.parse(formDataToObject(formData));
 
   // If the user didn't type a mileage, fall back to the most recent
@@ -154,6 +156,7 @@ export async function updateIssue(
   issueId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = issueSchema.parse(formDataToObject(formData));
 
   const original = await prisma.issue.findUnique({
@@ -199,6 +202,7 @@ export async function updateIssue(
 // Delete
 // -----------------------------------------------------------------------------
 export async function deleteIssue(vehicleId: string, issueId: string) {
+  await requireVehicleOwnership(vehicleId);
   const issue = await prisma.issue.findUnique({
     where: { id: issueId },
     select: { vehicleId: true, resolvedServiceEntryId: true },

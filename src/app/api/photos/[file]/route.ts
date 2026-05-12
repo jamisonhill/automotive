@@ -5,18 +5,18 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 
 import { photoDir } from "@/lib/config";
+import { prisma } from "@/lib/db";
 import { isSafePhotoFilename } from "@/lib/photos";
+import { requireUserId } from "@/lib/session";
 
 /*
- * Serve a vehicle/receipt photo from the data volume.
+ * Serve a vehicle photo from the data volume.
  *
- * Why a route handler vs. just dropping files in /public?
- *   - /public is part of the build artifact; we'd lose photos on every deploy
- *   - We want the data on the NAS volume, separate from the image
- *   - Route handler lets us add auth, caching, and path-traversal checks
- *
- * The Cloudflare Access proxy (src/proxy.ts) already gates the request,
- * so by the time we get here the user is authenticated.
+ * Auth: the proxy middleware has already required a valid session. We also
+ * verify that the requested photo is referenced by a Vehicle row owned by
+ * the current user — so logged-in user A can't fetch logged-in user B's
+ * photos even if they somehow learn B's hash. 404 on miss to avoid leaking
+ * existence across the tenant boundary.
  */
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -37,6 +37,17 @@ export async function GET(
   // Defense in depth — only allow filenames that match the format we generate.
   if (!isSafePhotoFilename(file)) {
     return new NextResponse("Bad request", { status: 400 });
+  }
+
+  // Ownership gate. The current user must own a Vehicle that references
+  // this file. Otherwise return 404 so we never leak that the file exists.
+  const userId = await requireUserId();
+  const owner = await prisma.vehicle.findFirst({
+    where: { photoPath: file, userId },
+    select: { id: true },
+  });
+  if (!owner) {
+    return new NextResponse("Not found", { status: 404 });
   }
 
   const fullPath = path.join(photoDir(), file);

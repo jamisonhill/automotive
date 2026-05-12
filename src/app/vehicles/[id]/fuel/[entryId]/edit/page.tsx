@@ -5,6 +5,7 @@ import { FuelForm } from "@/components/fuel-form";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Edit a fuel entry. Same form as new, prefilled. Includes a delete action
@@ -16,9 +17,10 @@ export default async function EditFuelEntryPage({
   params: Promise<{ id: string; entryId: string }>;
 }) {
   const { id, entryId } = await params;
+  const userId = await requireUserId();
 
   const entry = await prisma.fuelEntry.findFirst({
-    where: { id: entryId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: entryId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: { vehicle: true },
   });
   if (!entry) notFound();

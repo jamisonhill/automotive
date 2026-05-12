@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { TireSetForm, TireSetRemovalForm } from "@/components/tire-set-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Edit a tire set. Three actions on this page:
@@ -25,9 +26,10 @@ export default async function EditTireSetPage({
   params: Promise<{ id: string; setId: string }>;
 }) {
   const { id, setId } = await params;
+  const userId = await requireUserId();
 
   const set = await prisma.tireSet.findFirst({
-    where: { id: setId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: setId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: { vehicle: true },
   });
   if (!set) notFound();

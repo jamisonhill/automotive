@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 
 import { receiptDir } from "@/lib/config";
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import { saveReceiptUpload } from "@/lib/receipts";
 import { advanceMatchingReminders } from "@/lib/reminder-advance";
 import { formDataToObject, serviceSchema } from "@/lib/validators";
@@ -62,6 +63,7 @@ export async function createServiceEntry(
   vehicleId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = serviceSchema.parse(formDataToObject(formData));
 
   // Receipt upload is optional. If a file came through, write it before
@@ -141,6 +143,7 @@ export async function updateServiceEntry(
   entryId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = serviceSchema.parse(formDataToObject(formData));
 
   const original = await prisma.serviceEntry.findUnique({
@@ -230,6 +233,7 @@ export async function updateServiceEntry(
 // Delete
 // -----------------------------------------------------------------------------
 export async function deleteServiceEntry(vehicleId: string, entryId: string) {
+  await requireVehicleOwnership(vehicleId);
   const entry = await prisma.serviceEntry.findUnique({
     where: { id: entryId },
   });

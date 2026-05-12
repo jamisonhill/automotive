@@ -4,6 +4,7 @@ import { createIssue } from "@/app/actions/issues";
 import { IssueForm, type ServiceEntryOption } from "@/components/issue-form";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import { serviceLabel } from "@/lib/service-types";
 
 /**
@@ -17,9 +18,10 @@ export default async function NewIssuePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     include: {
       odometerReadings: { orderBy: { recordedAt: "desc" }, take: 1 },
       // Only repair/diagnostic entries are likely to be a "fix" for an

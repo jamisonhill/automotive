@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import { serviceLabel } from "@/lib/service-types";
 import {
   computeWarrantyStatus,
@@ -39,6 +40,7 @@ export default async function WarrantiesPage({
   searchParams: Promise<{ filter?: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
   const { filter: filterParam } = await searchParams;
   // Default to "active" — most common landing intent.
   const activeFilter: FilterValue = isValidFilter(filterParam)
@@ -46,7 +48,7 @@ export default async function WarrantiesPage({
     : "active";
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: {
       id: true,
       year: true,

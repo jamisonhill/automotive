@@ -10,6 +10,7 @@ import {
   type YearTotals,
 } from "@/lib/analytics";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /*
  * Vehicle analytics — lifetime numbers (Phase 7a).
@@ -27,6 +28,7 @@ export default async function AnalyticsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   // One round-trip: pull every row needed for analytics totals. Volume
   // per vehicle is small (≤ a few hundred rows total), so loading them
@@ -34,7 +36,7 @@ export default async function AnalyticsPage({
   const [vehicle, fuelEntries, serviceEntries, tireSets, odometerReadings] =
     await Promise.all([
       prisma.vehicle.findFirst({
-        where: { id, isActive: true },
+        where: { id, userId, isActive: true },
         select: {
           id: true,
           year: true,

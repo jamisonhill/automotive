@@ -5,17 +5,16 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 
 import { receiptDir } from "@/lib/config";
+import { prisma } from "@/lib/db";
 import { isSafeReceiptFilename } from "@/lib/receipts";
+import { requireUserId } from "@/lib/session";
 
 /*
  * Serve a service-entry receipt from the data volume.
  *
- * Mirrors src/app/api/photos/[file]/route.ts — the only differences are the
- * directory (DATA_DIR/receipts), the filename validator (allows .pdf), and
- * the MIME map (also includes application/pdf).
- *
- * Cloudflare Access proxy gates the request, so we know the caller is auth'd
- * by the time we get here.
+ * Mirrors src/app/api/photos/[file]/route.ts. Auth: session is enforced by
+ * middleware, plus we verify the receipt's parent ServiceEntry hangs off a
+ * Vehicle owned by the current user. 404 on miss avoids leaking existence.
  */
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -36,6 +35,16 @@ export async function GET(
 
   if (!isSafeReceiptFilename(file)) {
     return new NextResponse("Bad request", { status: 400 });
+  }
+
+  // Ownership gate. Walk the relation: ServiceEntry → Vehicle → userId.
+  const userId = await requireUserId();
+  const owner = await prisma.serviceEntry.findFirst({
+    where: { receiptPath: file, vehicle: { userId } },
+    select: { id: true },
+  });
+  if (!owner) {
+    return new NextResponse("Not found", { status: 404 });
   }
 
   const fullPath = path.join(receiptDir(), file);

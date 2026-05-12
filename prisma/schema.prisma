@@ -27,15 +27,17 @@ datasource db {
 // -----------------------------------------------------------------------------
 // User — phase 9 auth. Email + bcrypt hash. One garage per user.
 // -----------------------------------------------------------------------------
-// The `vehicles Vehicle[]` backref is added in 9d when Vehicle gains userId.
-// For 9a we land just the standalone table so signup/login can work in
-// isolation without touching existing Vehicle rows.
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  // 9d: each user owns a private garage of vehicles. Cascade delete so
+  // closing an account drops everything (we never offer this UI today,
+  // but the relation should reflect ownership semantics).
+  vehicles     Vehicle[]
 }
 
 // -----------------------------------------------------------------------------
@@ -43,6 +45,10 @@ model User {
 // -----------------------------------------------------------------------------
 model Vehicle {
   id              String   @id @default(cuid())
+  // 9d: ownership. Nullable for the migration window so existing rows
+  // can be backfilled before the column flips to required (9d.3).
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   nickname        String?  // friendly name like "Daily" or "Truck"
   year            Int
   make            String

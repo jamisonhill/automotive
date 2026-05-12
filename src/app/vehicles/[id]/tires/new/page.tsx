@@ -4,6 +4,7 @@ import { createTireSet } from "@/app/actions/tires";
 import { PageHeader } from "@/components/page-header";
 import { TireSetForm } from "@/components/tire-set-form";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Install a new tire set. Pre-fills install mileage with the latest
@@ -16,9 +17,10 @@ export default async function NewTireSetPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: {
       id: true,
       year: true,

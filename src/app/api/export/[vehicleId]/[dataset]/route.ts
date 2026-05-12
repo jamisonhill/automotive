@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { toCsv, type CsvColumn } from "@/lib/csv";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /*
  * CSV export — one route handler that dispatches by dataset.
@@ -59,6 +60,7 @@ export async function GET(
   { params }: { params: Promise<{ vehicleId: string; dataset: string }> }
 ) {
   const { vehicleId, dataset } = await params;
+  const userId = await requireUserId();
 
   if (!isDataset(dataset)) {
     return new NextResponse("Unknown dataset", { status: 400 });
@@ -67,7 +69,7 @@ export async function GET(
   // Confirm the vehicle exists and is active. We need the identifying
   // fields anyway for the filename slug.
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id: vehicleId, isActive: true },
+    where: { id: vehicleId, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) {

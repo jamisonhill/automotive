@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import { formDataToObject, reminderSchema } from "@/lib/validators";
 
 /*
@@ -24,6 +25,7 @@ import { formDataToObject, reminderSchema } from "@/lib/validators";
 // Create
 // -----------------------------------------------------------------------------
 export async function createReminder(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = reminderSchema.parse(formDataToObject(formData));
 
   await prisma.reminder.create({
@@ -53,6 +55,7 @@ export async function updateReminder(
   reminderId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = reminderSchema.parse(formDataToObject(formData));
 
   // Confirm ownership before letting edits through.
@@ -150,6 +153,7 @@ const COMMON_REMINDER_DEFAULTS: {
  * vehicle stays on the reminders page after the create — no redirect.
  */
 export async function seedCommonReminders(vehicleId: string) {
+  await requireVehicleOwnership(vehicleId);
   const candidateTypes = COMMON_REMINDER_DEFAULTS.map((d) => d.serviceType);
   const existing = await prisma.reminder.findMany({
     where: { vehicleId, serviceType: { in: candidateTypes } },
@@ -181,6 +185,7 @@ export async function seedCommonReminders(vehicleId: string) {
 // Delete
 // -----------------------------------------------------------------------------
 export async function deleteReminder(vehicleId: string, reminderId: string) {
+  await requireVehicleOwnership(vehicleId);
   const original = await prisma.reminder.findUnique({
     where: { id: reminderId },
   });

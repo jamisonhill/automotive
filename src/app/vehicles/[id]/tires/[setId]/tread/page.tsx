@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import {
   minCorner,
   projectReplacement,
@@ -30,9 +31,10 @@ export default async function TreadDepthPage({
   params: Promise<{ id: string; setId: string }>;
 }) {
   const { id, setId } = await params;
+  const userId = await requireUserId();
 
   const set = await prisma.tireSet.findFirst({
-    where: { id: setId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: setId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: {
       vehicle: {
         select: {

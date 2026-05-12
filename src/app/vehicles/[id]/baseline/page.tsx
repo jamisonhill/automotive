@@ -4,6 +4,7 @@ import { saveBaseline } from "@/app/actions/vehicles";
 import { BaselineForm } from "@/components/baseline-form";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /*
  * Used-car baseline intake.
@@ -17,8 +18,9 @@ export default async function BaselinePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     include: { baseline: true },
   });
   if (!vehicle) notFound();

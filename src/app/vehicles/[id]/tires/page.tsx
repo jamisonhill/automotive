@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import {
   minCorner,
   projectReplacement,
@@ -26,9 +27,10 @@ export default async function TiresPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: {
       id: true,
       year: true,

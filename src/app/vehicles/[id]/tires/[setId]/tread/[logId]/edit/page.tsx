@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { TreadDepthForm } from "@/components/tread-depth-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Edit (or delete) a single tread depth reading.
@@ -18,12 +19,13 @@ export default async function EditTreadDepthPage({
   params: Promise<{ id: string; setId: string; logId: string }>;
 }) {
   const { id, setId, logId } = await params;
+  const userId = await requireUserId();
 
   const log = await prisma.treadDepthLog.findFirst({
     where: {
       id: logId,
       tireSetId: setId,
-      tireSet: { vehicleId: id, vehicle: { isActive: true } },
+      tireSet: { vehicleId: id, vehicle: { isActive: true, userId } },
     },
     include: {
       tireSet: {

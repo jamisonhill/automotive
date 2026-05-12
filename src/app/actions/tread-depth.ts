@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import { formDataToObject, treadDepthLogSchema } from "@/lib/validators";
 
 /*
@@ -32,6 +33,9 @@ import { formDataToObject, treadDepthLogSchema } from "@/lib/validators";
  * "this set isn't yours".
  */
 async function assertSetOwnership(vehicleId: string, setId: string) {
+  // The vehicle's user-ownership is already confirmed by the caller's
+  // requireVehicleOwnership(vehicleId) — this assertion just verifies
+  // the set↔vehicle relation.
   const set = await prisma.tireSet.findFirst({
     where: { id: setId, vehicleId, vehicle: { isActive: true } },
   });
@@ -47,6 +51,7 @@ export async function createTreadDepthLog(
   setId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   await assertSetOwnership(vehicleId, setId);
   const parsed = treadDepthLogSchema.parse(formDataToObject(formData));
 
@@ -91,6 +96,7 @@ export async function updateTreadDepthLog(
   logId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   await assertSetOwnership(vehicleId, setId);
   const parsed = treadDepthLogSchema.parse(formDataToObject(formData));
 
@@ -138,6 +144,7 @@ export async function deleteTreadDepthLog(
   setId: string,
   logId: string
 ) {
+  await requireVehicleOwnership(vehicleId);
   await assertSetOwnership(vehicleId, setId);
 
   const original = await prisma.treadDepthLog.findUnique({

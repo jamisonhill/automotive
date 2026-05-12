@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { computeTripStats, recomputeFuelMpgFrom } from "@/lib/fuel";
 import { pumpOcr, type PumpOcrResult } from "@/lib/ocr";
+import { requireVehicleOwnership } from "@/lib/queries";
+import { requireUserId } from "@/lib/session";
 import {
   fuelSchema,
   formDataToObject,
@@ -27,6 +29,7 @@ import {
 // Create fuel entry
 // -----------------------------------------------------------------------------
 export async function createFuelEntry(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = fuelSchema.parse(formDataToObject(formData));
 
   const stats = await computeTripStats({
@@ -98,6 +101,7 @@ export async function updateFuelEntry(
   entryId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = fuelSchema.parse(formDataToObject(formData));
 
   const stats = await computeTripStats({
@@ -167,6 +171,7 @@ export async function updateFuelEntry(
 // Delete fuel entry
 // -----------------------------------------------------------------------------
 export async function deleteFuelEntry(vehicleId: string, entryId: string) {
+  await requireVehicleOwnership(vehicleId);
   const entry = await prisma.fuelEntry.findUnique({ where: { id: entryId } });
   if (!entry || entry.vehicleId !== vehicleId) {
     throw new Error("Fuel entry not found");
@@ -195,6 +200,9 @@ export async function extractPumpData(formData: FormData): Promise<
   | { ok: true; data: PumpOcrResult }
   | { ok: false; error: string }
 > {
+  // OCR doesn't read or write user-scoped data, but it does consume our
+  // Anthropic budget. Require a session so anonymous traffic can't drain it.
+  await requireUserId();
   const file = formData.get("photo");
   if (!(file instanceof File) || file.size === 0) {
     return { ok: false, error: "No photo uploaded." };
@@ -234,6 +242,7 @@ export async function extractPumpData(formData: FormData): Promise<
 // Manual odometer reading (between fills/services)
 // -----------------------------------------------------------------------------
 export async function logOdometer(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = odometerSchema.parse(formDataToObject(formData));
 
   await prisma.odometerReading.create({

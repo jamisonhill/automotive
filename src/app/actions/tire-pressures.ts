@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import { formDataToObject, pressureLogSchema } from "@/lib/validators";
 
 /*
@@ -63,6 +64,7 @@ async function resolveTireSetId(
 // Create
 // -----------------------------------------------------------------------------
 export async function createPressureLog(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = pressureLogSchema.parse(formDataToObject(formData));
 
   const tireSetId = await resolveTireSetId(vehicleId, parsed.tireSetId);
@@ -99,6 +101,7 @@ export async function updatePressureLog(
   logId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = pressureLogSchema.parse(formDataToObject(formData));
 
   // Confirm the log belongs to this vehicle before we let edits through.
@@ -139,6 +142,7 @@ export async function updatePressureLog(
 // Delete
 // -----------------------------------------------------------------------------
 export async function deletePressureLog(vehicleId: string, logId: string) {
+  await requireVehicleOwnership(vehicleId);
   const original = await prisma.tirePressureLog.findUnique({
     where: { id: logId },
   });

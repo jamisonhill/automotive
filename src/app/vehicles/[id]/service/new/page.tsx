@@ -4,6 +4,7 @@ import { createServiceEntry } from "@/app/actions/service";
 import { PageHeader } from "@/components/page-header";
 import { ServiceForm } from "@/components/service-form";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Add a new service entry. Pre-fills odometer with the vehicle's last
@@ -16,9 +17,10 @@ export default async function NewServiceEntryPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     include: {
       odometerReadings: { orderBy: { recordedAt: "desc" }, take: 1 },
     },

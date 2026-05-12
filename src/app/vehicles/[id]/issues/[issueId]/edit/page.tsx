@@ -5,6 +5,7 @@ import { IssueForm, type ServiceEntryOption } from "@/components/issue-form";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import { serviceLabel } from "@/lib/service-types";
 
 /**
@@ -17,9 +18,10 @@ export default async function EditIssuePage({
   params: Promise<{ id: string; issueId: string }>;
 }) {
   const { id, issueId } = await params;
+  const userId = await requireUserId();
 
   const issue = await prisma.issue.findFirst({
-    where: { id: issueId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: issueId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: { vehicle: true },
   });
   if (!issue) notFound();

@@ -4,6 +4,7 @@ import { createReminder } from "@/app/actions/reminders";
 import { PageHeader } from "@/components/page-header";
 import { ReminderForm } from "@/components/reminder-form";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Create a new reminder for this vehicle.
@@ -14,9 +15,10 @@ export default async function NewReminderPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) notFound();

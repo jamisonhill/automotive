@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import { serviceLabel } from "@/lib/service-types";
 
 /*
@@ -22,13 +23,14 @@ export default async function ServiceTypeHistoryPage({
   params: Promise<{ id: string; serviceType: string }>;
 }) {
   const { id, serviceType } = await params;
+  const userId = await requireUserId();
 
   // Custom types intentionally don't have a stable history view — each
   // custom entry might be a different thing entirely.
   if (serviceType === "custom") notFound();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) notFound();

@@ -11,6 +11,7 @@ import {
 } from "@/components/pressure-log-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Edit (or delete) a single pressure log entry.
@@ -25,9 +26,10 @@ export default async function EditPressureLogPage({
   params: Promise<{ id: string; logId: string }>;
 }) {
   const { id, logId } = await params;
+  const userId = await requireUserId();
 
   const log = await prisma.tirePressureLog.findFirst({
-    where: { id: logId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: logId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: { vehicle: true },
   });
   if (!log) notFound();

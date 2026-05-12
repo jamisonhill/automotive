@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { ReminderForm } from "@/components/reminder-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Edit (or delete) a single reminder.
@@ -18,12 +19,13 @@ export default async function EditReminderPage({
   params: Promise<{ id: string; reminderId: string }>;
 }) {
   const { id, reminderId } = await params;
+  const userId = await requireUserId();
 
   const reminder = await prisma.reminder.findFirst({
     where: {
       id: reminderId,
       vehicleId: id,
-      vehicle: { isActive: true },
+      vehicle: { isActive: true, userId },
     },
     include: { vehicle: true },
   });

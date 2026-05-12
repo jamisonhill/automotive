@@ -4,6 +4,7 @@ import { createFuelEntry } from "@/app/actions/fuel";
 import { FuelForm } from "@/components/fuel-form";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Add a new fill-up. Pre-fills odometer with the vehicle's last known
@@ -15,9 +16,10 @@ export default async function NewFuelEntryPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     include: {
       odometerReadings: { orderBy: { recordedAt: "desc" }, take: 1 },
     },

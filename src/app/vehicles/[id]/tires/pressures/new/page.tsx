@@ -7,6 +7,7 @@ import {
   type TireSetOption,
 } from "@/components/pressure-log-form";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /**
  * Log a new pressure check. The form's tire-set picker is pre-selected
@@ -19,9 +20,10 @@ export default async function NewPressureLogPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) notFound();

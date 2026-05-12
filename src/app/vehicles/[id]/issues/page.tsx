@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 
 /*
  * Issues / DTC log — list with status filter.
@@ -30,11 +31,12 @@ export default async function IssuesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
   const { status: statusParam } = await searchParams;
   const activeFilter = isValidStatus(statusParam) ? statusParam : null;
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) notFound();

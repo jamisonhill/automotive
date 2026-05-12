@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
 import { savePhotoUpload } from "@/lib/photos";
+import { requireVehicleOwnership } from "@/lib/queries";
+import { requireUserId } from "@/lib/session";
 import {
   baselineSchema,
   formDataToObject,
@@ -32,6 +34,7 @@ import {
 // Create vehicle (with optional photo upload)
 // -----------------------------------------------------------------------------
 export async function createVehicle(formData: FormData) {
+  const userId = await requireUserId();
   const parsed = vehicleSchema.parse(formDataToObject(formData));
 
   // Photo is a File entry — handle separately from the zod-validated payload.
@@ -46,6 +49,7 @@ export async function createVehicle(formData: FormData) {
   const created = await prisma.vehicle.create({
     data: {
       ...parsed,
+      userId,
       photoPath,
       odometerReadings:
         parsed.purchaseMileage != null
@@ -68,6 +72,10 @@ export async function createVehicle(formData: FormData) {
 // Update vehicle
 // -----------------------------------------------------------------------------
 export async function updateVehicle(id: string, formData: FormData) {
+  // Reject the write before touching the form payload if the caller doesn't
+  // own this vehicle. Throws 404 — never leaks cross-user existence.
+  await requireVehicleOwnership(id);
+
   const parsed = vehicleSchema.parse(formDataToObject(formData));
 
   // Photo update is opt-in: only replace if a new file was sent.
@@ -94,6 +102,7 @@ export async function updateVehicle(id: string, formData: FormData) {
 // Archive vehicle (soft-delete: keep history, hide from main list)
 // -----------------------------------------------------------------------------
 export async function archiveVehicle(id: string) {
+  await requireVehicleOwnership(id);
   await prisma.vehicle.update({
     where: { id },
     data: { isActive: false },
@@ -106,6 +115,7 @@ export async function archiveVehicle(id: string) {
 // Save baseline (upsert — there's at most one per vehicle)
 // -----------------------------------------------------------------------------
 export async function saveBaseline(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = baselineSchema.parse(formDataToObject(formData));
 
   await prisma.baseline.upsert({

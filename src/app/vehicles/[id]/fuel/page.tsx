@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { Sparkline } from "@/components/sparkline";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import { summarize } from "@/lib/fuel";
 
 /*
@@ -24,9 +25,10 @@ export default async function FuelPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const userId = await requireUserId();
 
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     select: { id: true, year: true, make: true, model: true, nickname: true },
   });
   if (!vehicle) notFound();

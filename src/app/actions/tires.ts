@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
+import { requireVehicleOwnership } from "@/lib/queries";
 import {
   formDataToObject,
   tireSetRemovalSchema,
@@ -44,6 +45,7 @@ async function findActiveTireSet(vehicleId: string) {
 // Create
 // -----------------------------------------------------------------------------
 export async function createTireSet(vehicleId: string, formData: FormData) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = tireSetSchema.parse(formDataToObject(formData));
 
   // If the user is replacing existing tires, close out the active set
@@ -103,6 +105,7 @@ export async function updateTireSet(
   setId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = tireSetSchema.parse(formDataToObject(formData));
 
   const original = await prisma.tireSet.findUnique({ where: { id: setId } });
@@ -149,6 +152,7 @@ export async function removeTireSet(
   setId: string,
   formData: FormData
 ) {
+  await requireVehicleOwnership(vehicleId);
   const parsed = tireSetRemovalSchema.parse(formDataToObject(formData));
 
   const original = await prisma.tireSet.findUnique({ where: { id: setId } });
@@ -193,6 +197,7 @@ export async function removeTireSet(
 // Delete (drop the row entirely — only for fixing mistakes)
 // -----------------------------------------------------------------------------
 export async function deleteTireSet(vehicleId: string, setId: string) {
+  await requireVehicleOwnership(vehicleId);
   const original = await prisma.tireSet.findUnique({ where: { id: setId } });
   if (!original || original.vehicleId !== vehicleId) {
     throw new Error("Tire set not found");

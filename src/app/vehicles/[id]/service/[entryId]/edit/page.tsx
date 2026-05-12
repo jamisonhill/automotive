@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { ServiceForm } from "@/components/service-form";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
+import { requireUserId } from "@/lib/session";
 import type { ServiceCategory } from "@/lib/service-types";
 
 /**
@@ -20,9 +21,10 @@ export default async function EditServiceEntryPage({
   params: Promise<{ id: string; entryId: string }>;
 }) {
   const { id, entryId } = await params;
+  const userId = await requireUserId();
 
   const entry = await prisma.serviceEntry.findFirst({
-    where: { id: entryId, vehicleId: id, vehicle: { isActive: true } },
+    where: { id: entryId, vehicleId: id, vehicle: { isActive: true, userId } },
     include: { vehicle: true },
   });
   if (!entry) notFound();

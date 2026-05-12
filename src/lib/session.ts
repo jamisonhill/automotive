@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/db";
@@ -94,4 +94,26 @@ export async function requireSession() {
   const session = await getSession();
   if (!session) redirect("/login");
   return session;
+}
+
+/**
+ * Fast path for actions/pages that only need the userId, not the whole
+ * user row. Reads the `x-user-id` header set by the proxy middleware after
+ * cookie verification — never trusts an inbound client header because
+ * the matcher already restricted that route to authenticated traffic.
+ *
+ * If the header is missing (e.g. someone is calling a server action from a
+ * misconfigured context where middleware didn't run), fall back to verifying
+ * the session cookie directly via getSession.
+ */
+export async function requireUserId(): Promise<string> {
+  const h = await headers();
+  const fromHeader = h.get("x-user-id");
+  if (fromHeader) return fromHeader;
+
+  // Defense-in-depth fallback. If middleware didn't run for some reason,
+  // re-derive from the cookie. If even that misses, redirect to /login.
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return session.userId;
 }

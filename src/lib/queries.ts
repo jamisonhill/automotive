@@ -1,13 +1,20 @@
+import { notFound } from "next/navigation";
+
 import { prisma } from "@/lib/db";
 import { computeReminderStatus } from "@/lib/reminders";
+import { requireUserId } from "@/lib/session";
 import { computeWarrantyStatus } from "@/lib/warranties";
 
 /*
  * Read helpers used by server components.
  *
- * Keeping query logic out of pages keeps components focused on rendering and
- * makes it easier to share queries between routes (e.g., the garage list and
- * a future global search both want "active vehicles").
+ * Every query here is scoped to the current user — listActiveVehicles only
+ * returns the caller's garage, getVehicle returns null if the vehicle exists
+ * but belongs to someone else (no leakage of cross-user existence).
+ *
+ * Actions / route handlers that need to confirm ownership before mutating
+ * use requireVehicleOwnership() below — it throws a 404 on miss so the
+ * miss-vs-not-owned distinction never reaches the client.
  */
 
 /**
@@ -15,8 +22,9 @@ import { computeWarrantyStatus } from "@/lib/warranties";
  * pre-loaded so the card can show current mileage without a follow-up query.
  */
 export async function listActiveVehicles() {
+  const userId = await requireUserId();
   return prisma.vehicle.findMany({
-    where: { isActive: true },
+    where: { userId, isActive: true },
     orderBy: [{ createdAt: "asc" }],
     include: {
       odometerReadings: {
@@ -28,14 +36,34 @@ export async function listActiveVehicles() {
 }
 
 /**
+ * Verify the current user owns the given vehicle. Returns the bare Vehicle
+ * row on success. Throws notFound() if the vehicle doesn't exist, has been
+ * archived, or belongs to another user — server actions and route handlers
+ * use this as their gate before any vehicle-scoped write.
+ *
+ * Using notFound() (404) rather than forbid (403) means we never leak that
+ * a given vehicleId exists for some other user.
+ */
+export async function requireVehicleOwnership(vehicleId: string) {
+  const userId = await requireUserId();
+  const vehicle = await prisma.vehicle.findFirst({
+    where: { id: vehicleId, userId, isActive: true },
+  });
+  if (!vehicle) notFound();
+  return vehicle;
+}
+
+/**
  * Single vehicle by id, with the most recent odometer reading, baseline,
  * most recent fuel entry, most recent service entry, and the count of
  * open + monitoring issues so the dashboard can surface a badge. Returns
- * null if the vehicle doesn't exist or has been archived.
+ * null if the vehicle doesn't exist, has been archived, OR belongs to
+ * another user.
  */
 export async function getVehicle(id: string) {
+  const userId = await requireUserId();
   const vehicle = await prisma.vehicle.findFirst({
-    where: { id, isActive: true },
+    where: { id, userId, isActive: true },
     include: {
       baseline: true,
       odometerReadings: {
