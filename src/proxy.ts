@@ -77,8 +77,16 @@ function redirectToLogin(req: NextRequest): NextResponse {
 
 // Match everything except Next internals and static assets.
 // The PWA manifest and icons are public (no auth) so users can install the app.
+//
+// `.well-known/` is also excluded so the proxy never runs on it. Without this,
+// an unauthenticated request to `/.well-known/apple-app-site-association` (or
+// `assetlinks.json` on Android) falls through to redirectToLogin() and returns
+// a 307. Apple's and Google's crawlers do NOT follow that redirect, so mobile
+// universal links / app links would silently never verify. Excluding the path
+// lets Next serve the static association files directly. Same reasoning will
+// apply to future health-check and webhook routes — add them here when built.
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/.*|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/.*|\\.well-known/.*|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
   ],
 };
