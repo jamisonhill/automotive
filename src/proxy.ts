@@ -27,8 +27,24 @@ const PUBLIC_PATHS = new Set(["/login", "/signup"]);
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Strip any client-supplied `x-user-id` BEFORE doing anything else.
+  //
+  // This header is a trusted signal: `requireUserId()` in lib/session.ts
+  // returns it verbatim without re-verifying the JWT. Only this proxy may
+  // set it, and only after the session cookie checks out below.
+  //
+  // Why "before anything else" matters: the public-path branch used to
+  // return `NextResponse.next()` with the original headers intact. Because
+  // Next.js server actions dispatch by `Next-Action` id and can be POSTed to
+  // ANY route, a request to /login carrying `x-user-id: <someone-else>`
+  // reached the action layer with that header still attached — and ran as
+  // that user with no session at all. Deleting it here, ahead of every
+  // early return, closes that path.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.delete("x-user-id");
+
   if (PUBLIC_PATHS.has(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -46,9 +62,8 @@ export async function proxy(req: NextRequest) {
   }
 
   // Forward the userId to downstream handlers via a request header so
-  // server components don't have to re-verify the JWT. Set after
-  // verification — never trust an inbound x-user-id from a client.
-  const requestHeaders = new Headers(req.headers);
+  // server components don't have to re-verify the JWT. Safe to set now:
+  // any inbound value was deleted above, and the cookie is verified.
   requestHeaders.set("x-user-id", verified.userId);
   return NextResponse.next({ request: { headers: requestHeaders } });
 }
